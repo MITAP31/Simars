@@ -1,0 +1,9 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M64 178C113 142 163 142 212 178C261 214 311 214 360 178C401 148 437 145 466 160V211C417 181 367 181 318 217C269 253 219 253 170 217C129 187 94 185 64 205V178Z" fill="#7DD3FC"/>
+  <path d="M64 271C113 235 163 235 212 271C261 307 311 307 360 271C401 241 437 238 466 253V304C417 274 367 274 318 310C269 346 219 346 170 310C129 280 94 278 64 298V271Z" fill="#38BDF8"/>
+  <path d="M64 364C113 328 163 328 212 364C261 400 311 400 360 364C401 334 437 331 466 346V397C417 367 367 367 318 403C269 439 219 439 170 403C129 373 94 371 64 391V364Z" fill="#0EA5E9"/>
+  <path d="M297 49H375L289 206L420 159L262 459L289 289L145 341L297 49Z" fill="#FDE047"/>
+  <path d="M297 49H375L289 206L420 159L262 459L289 289L145 341L297 49Z" fill="url(#highlight)" fill-opacity=".25"/>
+  <text x="256" y="496" text-anchor="middle" fill="#E0F2FE" font-family="Arial, Helvetica, sans-serif" font-size="50" font-weight="800" letter-spacing="4">PLN</text>
+  <defs><linearGradient id="highlight" x1="145" y1="49" x2="420" y2="459" gradientUnits="userSpaceOnUse"><stop stop-color="#FFF7AE"/><stop offset="1" stop-color="#F59E0B"/></linearGradient></defs>
+</svg>
