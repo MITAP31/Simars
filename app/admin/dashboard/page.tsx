@@ -76,7 +76,7 @@ export default function DashboardPage() {
           <p className="text-sm font-medium text-blue-100">Senin, 31 Agustus 2026</p>
           <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">Selamat datang di SIMARS</h1>
           <p className="mt-2 max-w-xl text-sm leading-6 text-blue-100">Pantau arsip dan dokumen PLN Batam dari satu tempat yang terorganisir.</p>
-          <Link href="/arsip/tambah" className="mt-5 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-primary shadow-lg transition-transform hover:-translate-y-0.5"><Plus className="h-4 w-4" /> Tambah Arsip</Link>
+          <Link href="/admin/arsip/tambah" className="mt-5 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-primary shadow-lg transition-transform hover:-translate-y-0.5"><Plus className="h-4 w-4" /> Tambah Arsip</Link>
         </div>
         <div className="absolute -right-6 -top-12 h-64 w-64 opacity-90 drop-shadow-[0_18px_30px_rgba(0,0,0,0.12)]">
           <Image src="/pln-batam-mark-dark.svg" alt="Logo PLN Batam" fill sizes="256px" className="object-contain" priority />

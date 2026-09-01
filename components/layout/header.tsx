@@ -4,23 +4,29 @@ import { Bell, ChevronDown, UserCircle } from "lucide-react";
 import { usePathname } from "next/navigation";
 
 const pageTitles: Record<string, string> = {
-  "/dashboard": "Dashboard",
-  "/arsip": "Arsip",
-  "/kategori": "Kategori",
-  "/pengguna": "Pengguna",
-  "/pengaturan": "Pengaturan",
+  "/admin/dashboard": "Dashboard",
+  "/admin/arsip": "Arsip",
+  "/admin/kategori": "Kategori",
+  "/admin/pengguna": "Pengguna",
+  "/admin/pengaturan": "Pengaturan",
 };
 
 export default function Header() {
   const pathname = usePathname();
 
-  const pageTitle = pageTitles[pathname] ?? "SIMARS";
+  const pageTitle = pathname === "/admin/kategori/tambah"
+    ? "Tambah Kategori"
+    : pathname === "/admin/arsip/tambah"
+      ? "Tambah Arsip"
+      : pathname.startsWith("/admin/arsip/")
+        ? "Detail Arsip"
+        : pageTitles[pathname] ?? "SIMARS";
 
   return (
     <header className="flex h-20 items-center justify-between border-b border-border/80 bg-background/85 px-6 backdrop-blur-xl lg:px-8">
       {/* Judul halaman */}
       <div>
-        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">SIMARS / {pageTitle}</p>
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">SIMARS / ADMIN</p>
         <h2 className="mt-1 text-xl font-bold tracking-tight">{pageTitle}</h2>
       </div>
 

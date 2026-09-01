@@ -1,0 +1,22 @@
+import { MoreHorizontal, Plus, Search } from "lucide-react";
+import Link from "next/link";
+
+const archives = [
+  { code: "KP.01.02", division: "Keuangan", title: "Surat Permohonan Data", sheets: 4, type: "Surat Masuk", author: "PT Maju Jaya", year: 2026, date: "31 Agustus 2026", authenticity: "Asli", location: "Rak A-02 / Box 05" },
+  { code: "LP.03.01", division: "Operasional", title: "Laporan Kegiatan Bulanan", sheets: 24, type: "Laporan", author: "Divisi Operasional", year: 2026, date: "30 Agustus 2026", authenticity: "Asli", location: "Rak B-01 / Box 12" },
+  { code: "SDM.02.04", division: "SDM", title: "Surat Tugas Pegawai", sheets: 2, type: "Surat Keluar", author: "Manajer SDM", year: 2026, date: "29 Agustus 2026", authenticity: "Salinan", location: "Rak C-03 / Box 02" },
+  { code: "ADM.04.03", division: "Administrasi", title: "Dokumen Evaluasi Kinerja", sheets: 15, type: "Dokumen", author: "Tim Evaluasi", year: 2026, date: "28 Agustus 2026", authenticity: "Asli", location: "Rak A-04 / Box 09" },
+  { code: "RPT.01.05", division: "Sekretariat", title: "Berita Acara Rapat", sheets: 8, type: "Berita Acara", author: "Sekretariat Direksi", year: 2026, date: "27 Agustus 2026", authenticity: "Fotokopi", location: "Rak D-02 / Box 03" },
+];
+
+export default function ArsipPage() {
+  return <div className="space-y-6 p-6">
+    <div className="flex items-center justify-between"><div><h1 className="text-2xl font-bold tracking-tight">Arsip</h1><p className="text-muted-foreground">Kelola seluruh dokumen dan arsip.</p></div><Link href="/admin/arsip/tambah" className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"><Plus className="h-4 w-4" />Tambah Arsip</Link></div>
+    <div className="flex items-center gap-3"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><input type="text" placeholder="Cari kode klasifikasi, judul, divisi, atau pengirim..." className="h-10 w-full rounded-md border bg-background pl-10 pr-4 text-sm outline-none focus:ring-2 focus:ring-ring" /></div></div>
+    <div className="flex gap-2 overflow-x-auto"><button type="button" className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">Semua</button>{["Surat Masuk", "Surat Keluar", "Dokumen", "Laporan"].map((type) => <button key={type} type="button" className="whitespace-nowrap rounded-md border px-4 py-2 text-sm hover:bg-muted">{type}</button>)}</div>
+    <div className="overflow-hidden rounded-xl border bg-card shadow-sm"><div className="overflow-x-auto"><table className="min-w-[1500px] w-full text-sm"><thead><tr className="border-b bg-muted/50 text-left"><Head>Kode Klasifikasi</Head><Head>Divisi</Head><Head>Judul Arsip / Perihal</Head><Head>Jumlah Arsip (Lembar)</Head><Head>Jenis Arsip</Head><Head>Penulis / Pengirim</Head><Head>Tahun</Head><Head>Tanggal Dokumen</Head><Head>Tingkat Keaslian</Head><Head>Lokasi Simpan</Head><th className="px-5 py-3 text-right font-medium">Aksi</th></tr></thead><tbody>{archives.map((archive) => <tr key={archive.code} className="border-b last:border-0 hover:bg-muted/30"><Cell strong>{archive.code}</Cell><Cell>{archive.division}</Cell><td className="px-5 py-4"><Link href="/admin/arsip/001" className="font-medium hover:underline">{archive.title}</Link></td><Cell>{archive.sheets}</Cell><Cell>{archive.type}</Cell><Cell>{archive.author}</Cell><Cell>{archive.year}</Cell><Cell muted>{archive.date}</Cell><td className="px-5 py-4"><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${archive.authenticity === "Asli" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{archive.authenticity}</span></td><Cell muted>{archive.location}</Cell><td className="px-5 py-4 text-right"><button type="button" className="rounded-md p-2 hover:bg-muted" aria-label={`Menu ${archive.title}`}><MoreHorizontal className="h-4 w-4" /></button></td></tr>)}</tbody></table></div></div>
+  </div>;
+}
+
+function Head({ children }: { children: React.ReactNode }) { return <th className="whitespace-nowrap px-5 py-3 font-medium">{children}</th>; }
+function Cell({ children, muted, strong }: { children: React.ReactNode; muted?: boolean; strong?: boolean }) { return <td className={`whitespace-nowrap px-5 py-4 ${muted ? "text-muted-foreground" : ""} ${strong ? "font-medium" : ""}`}>{children}</td>; }

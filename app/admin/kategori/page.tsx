@@ -1,4 +1,5 @@
 import { MoreHorizontal, Plus } from "lucide-react";
+import Link from "next/link";
 
 const categories = [
   {
@@ -48,13 +49,13 @@ export default function KategoriPage() {
           </p>
         </div>
 
-        <button
-          type="button"
+        <Link
+          href="/admin/kategori/tambah"
           className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
         >
           <Plus className="h-4 w-4" />
           Tambah Kategori
-        </button>
+        </Link>
       </div>
 
       {/* Table */}
