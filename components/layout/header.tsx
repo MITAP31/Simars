@@ -16,6 +16,8 @@ export default function Header() {
 
   const pageTitle = pathname === "/admin/kategori/tambah"
     ? "Tambah Kategori"
+    : pathname.startsWith("/admin/kategori/")
+      ? "Edit Kategori"
     : pathname === "/admin/arsip/tambah"
       ? "Tambah Arsip"
       : pathname.startsWith("/admin/arsip/")

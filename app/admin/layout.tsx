@@ -1,14 +1,23 @@
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
+import { prisma } from "@/lib/prisma";
 
-export default function DashboardLayout({
+export const dynamic = "force-dynamic";
+
+export default async function DashboardLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const categories = await prisma.jenis_arsip.findMany({
+    where: { aktif: true },
+    select: { nama: true, slug: true },
+    orderBy: { nama: "asc" },
+  });
+
   return (
     <div className="flex min-h-screen">
-      <Sidebar />
+      <Sidebar categories={categories} />
 
       <div className="flex min-w-0 flex-1 flex-col">
         <Header />
