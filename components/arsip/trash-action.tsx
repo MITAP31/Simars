@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { Eye, MoreVertical, RotateCcw, Trash2 } from "lucide-react";
+import { Eye, MoreVertical, RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import { permanentlyDeleteArsip, restoreArsip } from "@/actions/arsip";
+import { restoreArsip } from "@/actions/arsip";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 
 type MenuPosition = {
@@ -21,7 +21,7 @@ export function TrashActions({
   name: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [dialog, setDialog] = useState<"restore" | "permanently-delete" | null>(null);
+  const [dialog, setDialog] = useState<"restore" | null>(null);
   const [position, setPosition] = useState<MenuPosition | null>(null);
 
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -113,10 +113,6 @@ export function TrashActions({
               Pulihkan
             </button>
 
-            <button type="button" role="menuitem" className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-sm text-destructive outline-none transition-colors hover:bg-destructive/10" onClick={() => { setIsOpen(false); setDialog("permanently-delete"); }}>
-              <Trash2 className="h-4 w-4" />
-              Hapus Permanen
-            </button>
           </div>,
           document.body
         )}
@@ -128,16 +124,6 @@ export function TrashActions({
         confirmLabel="Pulihkan"
         action={restoreArsip}
         id={id}
-      />
-      <ConfirmationDialog
-        open={dialog === "permanently-delete"}
-        onOpenChange={(open) => setDialog(open ? "permanently-delete" : null)}
-        title="Hapus Permanen"
-        description="Data yang dihapus secara permanen tidak dapat dipulihkan kembali."
-        confirmLabel="Hapus Permanen"
-        action={permanentlyDeleteArsip}
-        id={id}
-        variant="destructive"
       />
     </>
   );

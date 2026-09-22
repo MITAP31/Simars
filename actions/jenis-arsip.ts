@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect, unstable_rethrow } from "next/navigation";
 
 import { prisma } from "@/lib/prisma";
+import { requireAdmin } from "@/lib/auth";
 
 type CategoryToast = "category-created" | "category-updated" | "category-deleted" | "category-deactivated" | "category-duplicate" | "category-invalid" | "category-error";
 
@@ -76,6 +77,7 @@ function revalidateCategoryPages() {
 
 export async function createJenisArsip(formData: FormData) {
   try {
+    await requireAdmin();
     const nama = parseName(formData);
     await prisma.jenis_arsip.create({ data: { nama, slug: await uniqueSlug(nama), keterangan: parseKeterangan(formData), aktif: parseAktif(formData) } });
     revalidateCategoryPages();
@@ -89,6 +91,7 @@ export async function createJenisArsip(formData: FormData) {
 export async function updateJenisArsip(formData: FormData) {
   let id: bigint | null = null;
   try {
+    await requireAdmin();
     id = parseId(formData.get("id"));
     const existing = await prisma.jenis_arsip.findUnique({ where: { id }, select: { id: true } });
     if (!existing) throw new Error("Jenis arsip tidak ditemukan.");
@@ -105,6 +108,7 @@ export async function updateJenisArsip(formData: FormData) {
 
 export async function deleteJenisArsip(formData: FormData) {
   try {
+    await requireAdmin();
     const id = parseId(formData.get("id"));
     const category = await prisma.jenis_arsip.findUnique({ where: { id }, select: { id: true } });
     if (!category) throw new Error("Jenis arsip tidak ditemukan.");

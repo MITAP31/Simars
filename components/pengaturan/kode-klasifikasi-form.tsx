@@ -37,7 +37,7 @@ export function KodeKlasifikasiForm({ action, parents, values = {}, submitLabel 
         <Field label="Status" htmlFor="aktif"><select id="aktif" name="aktif" defaultValue={values.aktif === false ? "false" : "true"} className={inputClass}><option value="true">Aktif</option><option value="false">Nonaktif</option></select></Field>
       </div>
       <div className="flex flex-col-reverse gap-3 border-t p-6 sm:flex-row sm:justify-end">
-        <Link href="/admin/pengaturan/kode-klasifikasi" className="rounded-md border px-5 py-2 text-center text-sm font-medium hover:bg-muted">Batal</Link>
+        <Link href="/admin/master-data/kode-klasifikasi" className="rounded-md border px-5 py-2 text-center text-sm font-medium hover:bg-muted">Batal</Link>
         <button type="submit" className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"><Save className="h-4 w-4" />{submitLabel}</button>
       </div>
     </form>

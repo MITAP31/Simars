@@ -4,8 +4,9 @@ import { revalidatePath } from "next/cache";
 import { redirect, unstable_rethrow } from "next/navigation";
 
 import { prisma } from "@/lib/prisma";
+import { requireAdmin } from "@/lib/auth";
 
-const listPath = "/admin/pengaturan/kode-klasifikasi";
+const listPath = "/admin/master-data/kode-klasifikasi";
 
 type ClassificationToast =
   | "classification-created"
@@ -14,6 +15,7 @@ type ClassificationToast =
   | "classification-duplicate"
   | "classification-invalid"
   | "classification-in-use"
+  | "classification-has-children"
   | "classification-hierarchy-invalid"
   | "classification-error";
 
@@ -100,13 +102,14 @@ function classificationError(error: unknown): ClassificationToast {
 
 function revalidateClassificationPages() {
   revalidatePath(listPath);
-  revalidatePath("/admin/pengaturan", "layout");
+  revalidatePath("/admin/master-data", "layout");
   revalidatePath("/admin/arsip");
   revalidatePath("/admin/arsip/tambah");
 }
 
 export async function createKodeKlasifikasi(formData: FormData) {
   try {
+    await requireAdmin();
     const data = await parseData(formData);
     const existing = await prisma.kode_klasifikasi.findFirst({ where: { kode: data.kode }, select: { id: true } });
     if (existing) throw new Error("Kode sudah digunakan.");
@@ -122,6 +125,7 @@ export async function createKodeKlasifikasi(formData: FormData) {
 export async function updateKodeKlasifikasi(formData: FormData) {
   let id: bigint | null = null;
   try {
+    await requireAdmin();
     id = parseId(formData.get("id"));
     const data = await parseData(formData, id);
     if (!data.is_induk) {
@@ -142,6 +146,7 @@ export async function updateKodeKlasifikasi(formData: FormData) {
 
 export async function deleteKodeKlasifikasi(formData: FormData) {
   try {
+    await requireAdmin();
     const id = parseId(formData.get("id"));
     const [classification, archiveCount, childCount] = await Promise.all([
       prisma.kode_klasifikasi.findUnique({ where: { id }, select: { id: true } }),
@@ -149,9 +154,13 @@ export async function deleteKodeKlasifikasi(formData: FormData) {
       prisma.kode_klasifikasi.count({ where: { parent_id: id } }),
     ]);
     if (!classification) throw new Error("Kode klasifikasi tidak ditemukan.");
-    if (archiveCount > 0 || childCount > 0) {
+    if (archiveCount > 0) {
       revalidateClassificationPages();
       redirect(pathWithToast("classification-in-use"));
+    }
+    if (childCount > 0) {
+      revalidateClassificationPages();
+      redirect(pathWithToast("classification-has-children"));
     }
     await prisma.kode_klasifikasi.delete({ where: { id } });
     revalidateClassificationPages();

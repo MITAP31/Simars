@@ -8,7 +8,7 @@ const globalForPrisma = globalThis as unknown as {
 
 // Memaksa instance development diperbarui setelah Prisma Client digenerate ulang.
 // Tanpa penanda ini, instance global lama dapat tetap memakai metadata schema sebelumnya.
-const prismaClientVersion = "kode-klasifikasi-is-induk-v1";
+const prismaClientVersion = "jadwal-retensi-v1";
 
 const adapter = new PrismaPg({
   connectionString: process.env.DATABASE_URL,

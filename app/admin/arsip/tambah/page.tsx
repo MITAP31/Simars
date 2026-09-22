@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { ArrowLeft, Upload } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
 import { createArsip } from "@/actions/arsip";
+import { ArsipFileField } from "@/components/arsip/arsip-file-field";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -9,8 +10,13 @@ export const dynamic = "force-dynamic";
 const inputClass = "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
 
 export default async function TambahArsipPage() {
-  const [classificationCodes, storageLocations, jenisArsip] = await Promise.all([
+  const [classificationCodes, divisions, storageLocations, jenisArsip] = await Promise.all([
     prisma.kode_klasifikasi.findMany({
+      where: { aktif: true },
+      select: { id: true, kode: true, nama: true },
+      orderBy: { kode: "asc" },
+    }),
+    prisma.divisi.findMany({
       where: { aktif: true },
       select: { id: true, kode: true, nama: true },
       orderBy: { kode: "asc" },
@@ -42,7 +48,7 @@ export default async function TambahArsipPage() {
             <Field label="Nomor Arsip"><input name="nomor_arsip" type="text" placeholder="Contoh: 001/PLN-BTM/2026" className={inputClass} required /></Field>
             <Field label="Kode Klasifikasi"><select name="kode_klasifikasi_id" defaultValue="" className={inputClass} required><option value="" disabled>Cari atau pilih kode klasifikasi</option>{classificationCodes.map((classification) => <option key={classification.id.toString()} value={classification.id.toString()}>{classification.kode} — {classification.nama}</option>)}</select></Field>
           </div>
-          <Field label="Divisi"><input type="text" placeholder="Contoh: Divisi Keuangan" className={inputClass} /></Field>
+          <Field label="Divisi"><select name="divisi_id" defaultValue="" className={inputClass}><option value="">Pilih divisi</option>{divisions.map((division) => <option key={division.id.toString()} value={division.id.toString()}>{division.kode} — {division.nama}</option>)}</select></Field>
           <Field label="Judul Arsip / Perihal"><input name="nama_arsip" type="text" placeholder="Masukkan judul arsip atau perihal dokumen" className={inputClass} required /></Field>
           <div className="grid gap-6 md:grid-cols-2">
             <Field label="Jumlah Arsip (Lembar)"><input name="jumlah" type="number" min="1" step="1" placeholder="Contoh: 12" className={inputClass} required /></Field>
@@ -56,8 +62,8 @@ export default async function TambahArsipPage() {
             <Field label="Tanggal Dokumen"><input name="tanggal_arsip" type="date" className={inputClass} /></Field>
             <Field label="Tingkat Keaslian"><select name="tingkat_keaslian" defaultValue="" className={inputClass}><option value="" disabled>Pilih tingkat keaslian</option><option value="Asli">Asli</option><option value="Salinan">Salinan</option><option value="Fotokopi">Fotokopi</option></select></Field>
           </div>
-          <Field label="Lokasi Simpan"><select name="lokasi_id" defaultValue="" className={inputClass}><option value="">Cari atau pilih lokasi simpan</option>{storageLocations.map((location) => <option key={location.id.toString()} value={location.id.toString()}>{location.kode} — {location.nama}</option>)}</select></Field>
-          <Field label="File Dokumen"><div className="rounded-lg border border-dashed p-8 text-center"><Upload className="mx-auto h-8 w-8 text-muted-foreground" /><p className="mt-3 text-sm font-medium">Pilih file dokumen</p><p className="mt-1 text-xs text-muted-foreground">Upload file belum tersedia pada tahap ini.</p><label className="mt-4 inline-flex cursor-not-allowed rounded-md border px-4 py-2 text-sm font-medium text-muted-foreground">Pilih File<input type="file" className="hidden" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" disabled /></label></div></Field>
+          <Field label="Lokasi Simpan"><select name="lokasi_penyimpanan_id" defaultValue="" className={inputClass}><option value="">Cari atau pilih lokasi simpan</option>{storageLocations.map((location) => <option key={location.id.toString()} value={location.id.toString()}>{location.kode} — {location.nama}</option>)}</select></Field>
+          <Field label="File Dokumen"><ArsipFileField /></Field>
         </div>
         <div className="flex justify-end gap-3 border-t p-6"><Link href="/admin/arsip" className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted">Batal</Link><button type="submit" className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">Simpan Arsip</button></div>
       </form>

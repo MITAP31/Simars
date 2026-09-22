@@ -6,9 +6,12 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   Archive,
+  ArchiveRestore,
   Building2,
   ChevronDown,
   ClipboardList,
+  Clock,
+  Database,
   FileText,
   FolderOpen,
   Inbox,
@@ -29,21 +32,23 @@ const menuItems = [
     icon: Archive,
     children: [
       { title: "Daftar Arsip", href: "/admin/arsip", icon: Archive },
-      { title: "Tempat Sampah", href: "/admin/arsip/tempat-sampah", icon: Trash2 },
+      { title: "Arsip Akhir Retensi", href: "/admin/arsip/tempat-sampah", icon: ArchiveRestore },
     ],
   },
   { title: "Kategori", href: "/admin/kategori", icon: FolderOpen },
-  { title: "Pengguna", href: "/admin/pengguna", icon: Users },
   {
-    title: "Pengaturan",
-    href: "/admin/pengaturan",
-    icon: Settings,
+    title: "Master Data",
+    href: "/admin/master-data",
+    icon: Database,
     children: [
-      { title: "Divisi", href: "/admin/pengaturan/divisi", icon: Building2 },
-      { title: "Kode Klasifikasi", href: "/admin/pengaturan/kode-klasifikasi", icon: Tags },
-      { title: "Lokasi Penyimpanan", href: "/admin/pengaturan/lokasi-penyimpanan", icon: Warehouse },
+      { title: "Kode Klasifikasi", href: "/admin/master-data/kode-klasifikasi", icon: Tags },
+      { title: "Jadwal Retensi", href: "/admin/master-data/jadwal-retensi", icon: Clock },
+      { title: "Divisi", href: "/admin/master-data/divisi", icon: Building2 },
+      { title: "Lokasi Penyimpanan", href: "/admin/master-data/lokasi-penyimpanan", icon: Warehouse },
     ],
   },
+  { title: "Pengguna", href: "/admin/pengguna", icon: Users },
+  { title: "Pengaturan", href: "/admin/pengaturan", icon: Settings },
 ];
 
 type SidebarCategory = {
@@ -65,13 +70,13 @@ export default function Sidebar({ categories }: { categories: SidebarCategory[] 
   const router = useRouter();
   const [isArsipOpen, setIsArsipOpen] = useState(false);
   const [isKategoriOpen, setIsKategoriOpen] = useState(false);
-  const [isPengaturanOpen, setIsPengaturanOpen] = useState(false);
+  const [isMasterDataOpen, setIsMasterDataOpen] = useState(false);
   const isArsipSubmenu = pathname !== "/admin/arsip" && pathname.startsWith("/admin/arsip/");
   const isKategoriSubmenu = pathname !== "/admin/kategori" && pathname.startsWith("/admin/kategori/");
   const showArsipChildren = isArsipSubmenu || (pathname === "/admin/arsip" && isArsipOpen);
   const showKategoriChildren = isKategoriSubmenu || (pathname === "/admin/kategori" && isKategoriOpen);
-  const isPengaturanSubmenu = pathname !== "/admin/pengaturan" && pathname.startsWith("/admin/pengaturan/");
-  const showPengaturanChildren = isPengaturanSubmenu || (pathname === "/admin/pengaturan" && isPengaturanOpen);
+  const isMasterDataSubmenu = pathname !== "/admin/master-data" && pathname.startsWith("/admin/master-data/");
+  const showMasterDataChildren = isMasterDataSubmenu || (pathname === "/admin/master-data" && isMasterDataOpen);
 
   const handleArsipClick = () => {
     if (pathname === "/admin/arsip") {
@@ -93,14 +98,14 @@ export default function Sidebar({ categories }: { categories: SidebarCategory[] 
     router.push("/admin/kategori");
   };
 
-  const handlePengaturanClick = () => {
-    if (pathname === "/admin/pengaturan") {
-      setIsPengaturanOpen((open) => !open);
+  const handleMasterDataClick = () => {
+    if (pathname === "/admin/master-data") {
+      setIsMasterDataOpen((open) => !open);
       return;
     }
 
-    setIsPengaturanOpen(false);
-    router.push("/admin/pengaturan");
+    setIsMasterDataOpen(false);
+    router.push("/admin/master-data");
   };
 
   return (
@@ -168,21 +173,21 @@ export default function Sidebar({ categories }: { categories: SidebarCategory[] 
             );
           }
 
-          if (item.href === "/admin/pengaturan") {
+          if (item.href === "/admin/master-data") {
             return (
               <div key={item.href}>
                 <button
                   type="button"
-                  onClick={handlePengaturanClick}
+                  onClick={handleMasterDataClick}
                   className={`group flex w-full items-center justify-between gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all ${
                     isActive ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm" : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                   }`}
-                  aria-expanded={showPengaturanChildren}
+                  aria-expanded={showMasterDataChildren}
                 >
                   <span className="flex items-center gap-3"><Icon className={`h-5 w-5 transition-colors ${isActive ? "text-white" : "text-primary group-hover:text-sidebar-accent-foreground"}`} />{item.title}</span>
-                  <ChevronDown className={`h-4 w-4 transition-transform ${showPengaturanChildren ? "rotate-180" : ""}`} />
+                  <ChevronDown className={`h-4 w-4 transition-transform ${showMasterDataChildren ? "rotate-180" : ""}`} />
                 </button>
-                {showPengaturanChildren && <div className="ml-8 mt-1 space-y-1">{item.children?.map((child) => {
+                {showMasterDataChildren && <div className="ml-8 mt-1 space-y-1">{item.children?.map((child) => {
                   const ChildIcon = child.icon;
                   const isChildActive = pathname === child.href || pathname.startsWith(`${child.href}/`);
                   return <Link key={child.href} href={child.href} className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${isChildActive ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"}`}><ChildIcon className="h-4 w-4 shrink-0" />{child.title}</Link>;

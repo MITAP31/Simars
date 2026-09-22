@@ -19,8 +19,8 @@ export function DeleteArsipButton({ id, name }: { id: string; name: string }) {
         open={isOpen}
         onOpenChange={setIsOpen}
         title="Hapus Arsip"
-        description="Apakah Anda yakin ingin memindahkan arsip ini ke Tempat Sampah?"
-        confirmLabel="Hapus"
+        description="Apakah Anda yakin ingin memindahkan arsip ini ke Arsip Akhir Retensi?"
+        confirmLabel="Pindahkan"
         action={deleteArsip}
         id={id}
         variant="destructive"

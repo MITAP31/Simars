@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, FileText, Pencil } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, Download, Eye, FileIcon, FileText, FileX, ImageIcon, Pencil } from "lucide-react";
 
 import { prisma } from "@/lib/prisma";
+import { calculateRetention, hasPermanentRetentionDecision, needsArchiveRetentionReview } from "@/lib/retensi";
+
+import { DetailTinjauRetensiButton } from "@/components/arsip/detail-tinjau-retensi-button";
 
 const dateFormatter = new Intl.DateTimeFormat("id-ID", {
   day: "2-digit",
@@ -28,6 +31,44 @@ function formatDateTime(date: Date) {
   return dateTimeFormatter.format(date);
 }
 
+function getFileExtension(filename: string) {
+  const parts = filename.split(".");
+  return parts.length > 1 ? `.${parts.pop()?.toLowerCase()}` : "";
+}
+
+function getFileTypeBadge(ext: string) {
+  if (ext === ".pdf") {
+    return {
+      label: "PDF",
+      typeText: "Dokumen PDF",
+      icon: <FileText className="h-6 w-6 text-red-600" />,
+      bg: "bg-red-50 border-red-200",
+    };
+  }
+  if (ext === ".doc" || ext === ".docx") {
+    return {
+      label: "Word",
+      typeText: "Dokumen Microsoft Word",
+      icon: <FileText className="h-6 w-6 text-blue-600" />,
+      bg: "bg-blue-50 border-blue-200",
+    };
+  }
+  if ([".jpg", ".jpeg", ".png"].includes(ext)) {
+    return {
+      label: ext.replace(".", "").toUpperCase(),
+      typeText: "Berkas Gambar",
+      icon: <ImageIcon className="h-6 w-6 text-emerald-600" />,
+      bg: "bg-emerald-50 border-emerald-200",
+    };
+  }
+  return {
+    label: "File",
+    typeText: "Berkas Dokumen",
+    icon: <FileIcon className="h-6 w-6 text-muted-foreground" />,
+    bg: "bg-muted border-border",
+  };
+}
+
 export default async function DetailArsipPage({
   params,
 }: {
@@ -42,7 +83,12 @@ export default async function DetailArsipPage({
   const arsip = await prisma.arsip.findUnique({
     where: { id: BigInt(id) },
     include: {
-      kode_klasifikasi: true,
+      kode_klasifikasi: {
+        include: {
+          jadwal_retensi: true,
+        },
+      },
+      divisi: true,
       lokasi_penyimpanan: true,
       jenis_arsip: true,
     },
@@ -55,6 +101,45 @@ export default async function DetailArsipPage({
   const location = arsip.lokasi_penyimpanan
     ? `${arsip.lokasi_penyimpanan.kode} — ${arsip.lokasi_penyimpanan.nama}`
     : "—";
+
+  // Perhitungan dinamis jika ada Jadwal Retensi:
+  // Menjamin data lama (seperti TEST-RETENSI) yang kolomnya masih NULL tetap tampil akurat tanpa ubah database.
+  const dynamicRetention = arsip.kode_klasifikasi.jadwal_retensi && arsip.kode_klasifikasi.jadwal_retensi.aktif
+    ? calculateRetention({
+        tanggalArsip: arsip.tanggal_arsip,
+        tanggalDasarKhusus: arsip.tanggal_dasar_retensi,
+        jadwalRetensi: arsip.kode_klasifikasi.jadwal_retensi,
+      })
+    : null;
+
+  const displayTanggalDasar = arsip.tanggal_dasar_retensi ?? dynamicRetention?.tanggal_dasar_retensi ?? null;
+  const displayMulaiAktif = arsip.tanggal_mulai_aktif ?? dynamicRetention?.tanggal_mulai_aktif ?? null;
+  const displaySelesaiAktif = arsip.tanggal_selesai_aktif ?? dynamicRetention?.tanggal_selesai_aktif ?? null;
+  const displaySelesaiInaktif = arsip.tanggal_selesai_inaktif ?? dynamicRetention?.tanggal_selesai_inaktif ?? null;
+  const hasPermanentDecision = hasPermanentRetentionDecision(arsip.status_retensi);
+  const displayStatusRetensi = hasPermanentDecision ? "SELESAI_RETENSI_PERMANEN" : arsip.status_retensi ?? dynamicRetention?.status_retensi ?? null;
+  const displayNasibAkhir = arsip.kode_klasifikasi.jadwal_retensi?.keterangan_akhir;
+
+  const schedule = arsip.kode_klasifikasi.jadwal_retensi;
+  const isPerluPeninjauan = needsArchiveRetentionReview(dynamicRetention, arsip.status_retensi);
+
+  const reviewData =
+    isPerluPeninjauan && schedule
+      ? {
+          id: arsip.id.toString(),
+          nomor_arsip: arsip.nomor_arsip,
+          nama_arsip: arsip.nama_arsip,
+          kode_klasifikasi: arsip.kode_klasifikasi.kode,
+          nama_klasifikasi: arsip.kode_klasifikasi.nama,
+          jadwal_retensi_ringkas: `${schedule.retensi_aktif} ${schedule.satuan_retensi_aktif} Aktif + ${schedule.retensi_inaktif} ${schedule.satuan_retensi_inaktif} Inaktif`,
+          dasar_perhitungan: schedule.dasar_perhitungan,
+          tanggal_mulai_aktif: formatDate(displayMulaiAktif),
+          tanggal_selesai_aktif: formatDate(displaySelesaiAktif),
+          tanggal_selesai_inaktif: formatDate(displaySelesaiInaktif),
+          nasib_akhir: schedule.keterangan_akhir,
+          status_retensi: dynamicRetention?.label_status ?? "Selesai Retensi (Perlu Peninjauan)",
+        }
+      : null;
 
   return (
     <div className="space-y-6 p-6">
@@ -78,6 +163,7 @@ export default async function DetailArsipPage({
           <InformationField label="Nomor Arsip" value={arsip.nomor_arsip} />
           <InformationField label="Jenis Arsip" value={arsip.jenis_arsip?.nama ?? "—"} />
           <InformationField label="Kode Klasifikasi" value={`${arsip.kode_klasifikasi.kode} — ${arsip.kode_klasifikasi.nama}`} />
+          <InformationField label="Divisi" value={arsip.divisi ? `${arsip.divisi.kode} — ${arsip.divisi.nama}` : "—"} />
           <InformationField label="Tanggal Arsip" value={formatDate(arsip.tanggal_arsip)} />
           <InformationField label="Judul Arsip" value={arsip.nama_arsip} prominent />
           <InformationField label="Penulis / Pengirim" value={arsip.penulis_pengirim ?? "—"} />
@@ -97,14 +183,164 @@ export default async function DetailArsipPage({
       </div>
 
       <div className="rounded-xl border bg-card shadow-sm">
-        <div className="border-b p-6"><h2 className="font-semibold">File Dokumen</h2></div>
-        <div className="flex items-center gap-3 p-6">
-          <div className="rounded-lg bg-muted p-3"><FileText className="h-5 w-5" /></div>
-          <div>
-            <p className="font-medium">{arsip.file_arsip ?? "Belum ada file dokumen"}</p>
-            <p className="text-sm text-muted-foreground">{arsip.file_arsip ? "File tersimpan pada arsip." : "Tidak ada file yang terlampir."}</p>
+        <div className="border-b p-6 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Clock className="h-5 w-5 text-primary" />
+            <h2 className="font-semibold">Informasi Retensi</h2>
+          </div>
+          <div className="flex items-center gap-2.5">
+            {reviewData && <DetailTinjauRetensiButton data={reviewData} />}
+            {displayStatusRetensi ? (
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                  displayStatusRetensi === "AKTIF"
+                    ? "bg-emerald-100 text-emerald-800"
+                    : displayStatusRetensi === "INAKTIF"
+                    ? "bg-amber-100 text-amber-800"
+                    : hasPermanentDecision
+                    ? "bg-blue-100 text-blue-800"
+                    : displayNasibAkhir === "PERMANEN"
+                    ? "bg-blue-100 text-blue-800"
+                    : displayNasibAkhir === "MUSNAH"
+                    ? "bg-rose-100 text-rose-800"
+                    : "bg-purple-100 text-purple-800"
+                }`}
+              >
+                {displayStatusRetensi === "AKTIF"
+                  ? "Retensi Aktif"
+                  : displayStatusRetensi === "INAKTIF"
+                  ? "Retensi Inaktif"
+                  : hasPermanentDecision
+                  ? "Permanen"
+                  : displayNasibAkhir === "PERMANEN"
+                  ? "Permanen"
+                  : displayNasibAkhir === "MUSNAH"
+                  ? "Perlu Tindakan (Pemusnahan)"
+                  : "Perlu Tindakan (Peninjauan)"}
+              </span>
+            ) : (
+              <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
+                Tidak Ada Jadwal Retensi
+              </span>
+            )}
           </div>
         </div>
+        <div className="grid gap-6 p-6 md:grid-cols-2">
+          <div>
+            <p className="text-sm text-muted-foreground">Status Retensi</p>
+            <p className="mt-1 font-semibold text-foreground">
+              {displayStatusRetensi === "AKTIF"
+                ? "Retensi Aktif"
+                : displayStatusRetensi === "INAKTIF"
+                ? "Retensi Inaktif"
+                : hasPermanentDecision
+                ? "Permanen (Keputusan Admin)"
+                : displayStatusRetensi === "SELESAI_RETENSI"
+                ? displayNasibAkhir === "PERMANEN"
+                  ? "Permanen (Disimpan Permanen)"
+                  : displayNasibAkhir === "MUSNAH"
+                  ? "Perlu Tindakan (Siap Dimusnahkan)"
+                  : "Perlu Peninjauan (Ada Pengecualian)"
+                : "—"}
+            </p>
+          </div>
+          <InformationField
+            label="Mulai Retensi"
+            value={formatDate(displayMulaiAktif)}
+          />
+          <InformationField
+            label="Selesai Masa Aktif"
+            value={formatDate(displaySelesaiAktif)}
+          />
+          <InformationField
+            label="Selesai Masa Inaktif"
+            value={formatDate(displaySelesaiInaktif)}
+          />
+          <InformationField
+            label="Nasib Akhir"
+            value={
+              displayNasibAkhir === "PERMANEN"
+                ? "Disimpan Permanen"
+                : displayNasibAkhir === "MUSNAH"
+                ? "Dimusnahkan"
+                : displayNasibAkhir === "MUSNAH_DENGAN_KETERANGAN_KHUSUS"
+                ? "Perlu Peninjauan"
+                : "—"
+            }
+          />
+          <InformationField
+            label="Jadwal Retensi"
+            value={
+              arsip.kode_klasifikasi.jadwal_retensi
+                ? `${arsip.kode_klasifikasi.jadwal_retensi.retensi_aktif} ${arsip.kode_klasifikasi.jadwal_retensi.satuan_retensi_aktif} Aktif + ${arsip.kode_klasifikasi.jadwal_retensi.retensi_inaktif} ${arsip.kode_klasifikasi.jadwal_retensi.satuan_retensi_inaktif} Inaktif`
+                : "Tidak ada jadwal retensi aktif"
+            }
+          />
+          <InformationField
+            label="Dasar Perhitungan"
+            value={arsip.kode_klasifikasi.jadwal_retensi?.dasar_perhitungan || "Sesuai Tanggal Arsip"}
+            fullWidth
+          />
+        </div>
+      </div>
+
+      <div className="rounded-xl border bg-card shadow-sm">
+        <div className="border-b p-6"><h2 className="font-semibold">File Dokumen</h2></div>
+        {arsip.file_arsip ? (() => {
+          const fileName = arsip.file_arsip.split("/").pop() ?? "Dokumen Arsip";
+          const fileExt = getFileExtension(fileName);
+          const typeDetails = getFileTypeBadge(fileExt);
+
+          return (
+            <div className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-4">
+                <div className={`flex h-12 w-12 items-center justify-center rounded-xl border ${typeDetails.bg} shadow-xs`}>
+                  {typeDetails.icon}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-foreground">{fileName}</p>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
+                      <CheckCircle2 className="h-3 w-3" />
+                      File tersedia
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {typeDetails.typeText} {fileExt ? `(${fileExt.toUpperCase()})` : ""} · Berkas digital tersimpan
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex shrink-0 items-center gap-2">
+                <Link
+                  href={`/admin/arsip/${arsip.id.toString()}/file`}
+                  className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 shadow-xs transition-colors"
+                >
+                  <Eye className="h-4 w-4" />
+                  Lihat File
+                </Link>
+                <a
+                  href={arsip.file_arsip}
+                  download
+                  className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted transition-colors"
+                >
+                  <Download className="h-4 w-4" />
+                  Unduh
+                </a>
+              </div>
+            </div>
+          );
+        })() : (
+          <div className="flex items-center gap-3 p-6 text-muted-foreground">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
+              <FileX className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="font-medium text-sm text-foreground">Belum ada file dokumen</p>
+              <p className="text-xs text-muted-foreground">Tidak ada file atau lampiran berkas yang diunggah pada arsip ini.</p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

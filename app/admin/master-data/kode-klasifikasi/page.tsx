@@ -23,7 +23,7 @@ export default async function KodeKlasifikasiPage({ searchParams }: { searchPara
   return <div className="space-y-6 p-6">
     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div><h1 className="text-2xl font-bold tracking-tight">Kode Klasifikasi</h1><p className="text-muted-foreground">Kelola kode klasifikasi untuk pengelompokan arsip SIMARS.</p></div>
-      <Link href="/admin/pengaturan/kode-klasifikasi/tambah" className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"><Plus className="h-4 w-4" />Tambah Kode Klasifikasi</Link>
+      <Link href="/admin/master-data/kode-klasifikasi/tambah" className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"><Plus className="h-4 w-4" />Tambah Kode Klasifikasi</Link>
     </div>
 
     <KodeKlasifikasiList classifications={items} initialSearch={initialSearch} />

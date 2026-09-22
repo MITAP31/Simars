@@ -4,7 +4,7 @@ import { CheckCircle2, CircleAlert, CircleX, Info, X } from "lucide-react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
-type ToastCode = "created" | "updated" | "deleted" | "restored" | "permanently-deleted" | "error" | "warning" | "info" | "category-created" | "category-updated" | "category-deleted" | "category-deactivated" | "category-duplicate" | "category-invalid" | "category-error" | "classification-created" | "classification-updated" | "classification-deleted" | "classification-duplicate" | "classification-invalid" | "classification-in-use" | "classification-hierarchy-invalid" | "classification-error";
+type ToastCode = string;
 type ToastVariant = "success" | "error" | "warning" | "info";
 
 type ToastMessage = {
@@ -20,9 +20,12 @@ type ActiveToast = ToastMessage & {
 const messages: Record<ToastCode, ToastMessage> = {
   created: { title: "Arsip berhasil ditambahkan", description: "Data arsip baru telah disimpan.", variant: "success" },
   updated: { title: "Arsip berhasil diperbarui", description: "Perubahan data arsip telah disimpan.", variant: "success" },
-  deleted: { title: "Arsip berhasil dipindahkan ke Tempat Sampah", description: "Arsip masih dapat dipulihkan dari Tempat Sampah.", variant: "success" },
+  deleted: { title: "Arsip berhasil dipindahkan ke Arsip Retensi", description: "Arsip masih dapat dipulihkan dari Arsip Retensi.", variant: "success" },
   restored: { title: "Arsip berhasil dipulihkan", description: "Arsip kembali tersedia di daftar arsip.", variant: "success" },
   "permanently-deleted": { title: "Arsip berhasil dihapus permanen", description: "Data arsip tidak dapat dipulihkan kembali.", variant: "success" },
+  "retention-permanent": { title: "Keputusan retensi disimpan", description: "Arsip dipertahankan permanen dan tidak lagi memerlukan peninjauan.", variant: "success" },
+  "retention-destroyed": { title: "Arsip dipindahkan ke akhir retensi", description: "Record dan file arsip tetap tersimpan aman.", variant: "success" },
+  "retention-review-error": { title: "Keputusan retensi gagal disimpan", description: "Arsip mungkin tidak lagi memenuhi syarat peninjauan.", variant: "error" },
   error: { title: "Gagal menyimpan arsip", description: "Silakan coba lagi.", variant: "error" },
   warning: { title: "Perhatian", description: "Silakan periksa kembali data Anda.", variant: "warning" },
   info: { title: "Informasi", description: "Tindakan Anda sedang diproses.", variant: "info" },
@@ -38,9 +41,49 @@ const messages: Record<ToastCode, ToastMessage> = {
   "classification-deleted": { title: "Kode klasifikasi berhasil dihapus", description: "Data tidak lagi tersedia pada daftar klasifikasi.", variant: "success" },
   "classification-duplicate": { title: "Kode klasifikasi sudah digunakan", description: "Gunakan kode klasifikasi yang berbeda.", variant: "error" },
   "classification-invalid": { title: "Data kode klasifikasi tidak valid", description: "Periksa kembali data wajib dan panjang isian.", variant: "error" },
-  "classification-in-use": { title: "Kode klasifikasi tidak dapat dihapus", description: "Kode masih digunakan oleh arsip atau menjadi induk kode lain.", variant: "warning" },
+  "classification-in-use": { title: "Kode klasifikasi tidak dapat dihapus", description: "Kode klasifikasi masih digunakan oleh data arsip.", variant: "warning" },
+  "classification-has-children": { title: "Kode klasifikasi tidak dapat dihapus", description: "Kode klasifikasi masih memiliki kode turunan.", variant: "warning" },
   "classification-hierarchy-invalid": { title: "Status induk tidak dapat diubah", description: "Kode yang masih memiliki anak tidak dapat diubah menjadi bukan induk.", variant: "warning" },
   "classification-error": { title: "Gagal menyimpan kode klasifikasi", description: "Silakan coba lagi.", variant: "error" },
+  "retention-created": { title: "Jadwal retensi berhasil ditambahkan", description: "Aturan jadwal retensi baru telah disimpan.", variant: "success" },
+  "retention-updated": { title: "Jadwal retensi berhasil diperbarui", description: "Perubahan jadwal retensi telah disimpan.", variant: "success" },
+  "retention-deleted": { title: "Jadwal retensi berhasil dihapus", description: "Jadwal retensi tidak lagi diterapkan pada kode klasifikasi ini.", variant: "success" },
+  "retention-duplicate": { title: "Jadwal retensi sudah ada", description: "Kode klasifikasi ini sudah memiliki jadwal retensi terdaftar.", variant: "error" },
+  "retention-invalid": { title: "Data jadwal retensi tidak valid", description: "Periksa kembali durasi, satuan, dan kelengkapan data.", variant: "error" },
+  "retention-in-use": { title: "Jadwal retensi tidak dapat dihapus", description: "Jadwal retensi sedang digunakan oleh dokumen arsip aktif.", variant: "warning" },
+  "retention-error": { title: "Gagal memproses jadwal retensi", description: "Terjadi kesalahan pada sistem. Silakan coba lagi.", variant: "error" },
+  "division-created": { title: "Divisi berhasil ditambahkan", description: "Data divisi baru telah disimpan.", variant: "success" },
+  "division-updated": { title: "Divisi berhasil diperbarui", description: "Perubahan data divisi telah disimpan.", variant: "success" },
+  "division-deleted": { title: "Divisi berhasil dihapus", description: "Data divisi tidak lagi tersedia pada sistem.", variant: "success" },
+  "division-in-use": { title: "Divisi tidak dapat dihapus", description: "Divisi masih digunakan oleh data arsip.", variant: "warning" },
+  "division-duplicate": { title: "Kode divisi sudah digunakan", description: "Gunakan kode divisi yang berbeda.", variant: "error" },
+  "division-invalid": { title: "Data divisi tidak valid", description: "Periksa kembali data wajib dan panjang isian.", variant: "error" },
+  "division-error": { title: "Gagal menyimpan divisi", description: "Silakan coba lagi.", variant: "error" },
+  "location-created": { title: "Lokasi penyimpanan berhasil ditambahkan", description: "Data lokasi baru telah disimpan.", variant: "success" },
+  "location-updated": { title: "Lokasi penyimpanan berhasil diperbarui", description: "Perubahan lokasi telah disimpan.", variant: "success" },
+  "location-deleted": { title: "Lokasi penyimpanan berhasil dihapus", description: "Data lokasi tidak lagi tersedia pada sistem.", variant: "success" },
+  "location-in-use": { title: "Lokasi penyimpanan tidak dapat dihapus", description: "Lokasi penyimpanan masih digunakan oleh data arsip.", variant: "warning" },
+  "location-has-children": { title: "Lokasi penyimpanan tidak dapat dihapus", description: "Lokasi penyimpanan masih memiliki lokasi turunan.", variant: "warning" },
+  "location-hierarchy-invalid": { title: "Status induk tidak dapat diubah", description: "Lokasi yang masih memiliki anak tidak dapat diubah menjadi bukan induk.", variant: "warning" },
+  "location-duplicate": { title: "Kode lokasi sudah digunakan", description: "Gunakan kode lokasi yang berbeda.", variant: "error" },
+  "location-invalid": { title: "Data lokasi penyimpanan tidak valid", description: "Periksa kembali data wajib dan panjang isian.", variant: "error" },
+  "location-error": { title: "Gagal menyimpan lokasi penyimpanan", description: "Silakan coba lagi.", variant: "error" },
+  "settings-updated": { title: "Pengaturan berhasil disimpan", description: "Perubahan konfigurasi sistem telah diterapkan.", variant: "success" },
+  "settings-invalid": { title: "Pengaturan tidak valid", description: "Periksa kembali data yang diisi.", variant: "error" },
+  "settings-error": { title: "Gagal menyimpan pengaturan", description: "Silakan coba lagi.", variant: "error" },
+  "user-created": { title: "Pengguna berhasil ditambahkan", description: "Akun pengguna baru telah dibuat.", variant: "success" },
+  "user-updated": { title: "Pengguna berhasil diperbarui", description: "Perubahan data pengguna telah disimpan.", variant: "success" },
+  "user-activated": { title: "Pengguna berhasil diaktifkan", description: "Akun pengguna kini aktif dan dapat login.", variant: "success" },
+  "user-deactivated": { title: "Pengguna berhasil dinonaktifkan", description: "Akses login akun pengguna telah dinonaktifkan.", variant: "warning" },
+  "user-password-reset": { title: "Password berhasil direset", description: "Kata sandi akun pengguna telah diperbarui.", variant: "success" },
+  "user-self-deactivate-forbidden": { title: "Aksi ditolak", description: "Anda tidak dapat menonaktifkan akun Anda sendiri.", variant: "error" },
+  "user-last-admin-forbidden": { title: "Aksi ditolak", description: "Minimal harus ada satu akun administrator yang aktif di sistem.", variant: "error" },
+  "user-duplicate-username": { title: "Username sudah digunakan", description: "Gunakan username lain yang belum terdaftar.", variant: "error" },
+  "user-duplicate-email": { title: "Email sudah digunakan", description: "Gunakan email lain yang belum terdaftar.", variant: "error" },
+  "user-password-mismatch": { title: "Konfirmasi password salah", description: "Password dan konfirmasi password tidak cocok.", variant: "error" },
+  "user-password-short": { title: "Password terlalu pendek", description: "Password harus minimal 8 karakter.", variant: "error" },
+  "user-invalid": { title: "Data pengguna tidak valid", description: "Periksa kembali data wajib dan format isian.", variant: "error" },
+  "user-error": { title: "Gagal memproses data pengguna", description: "Terjadi kesalahan pada sistem. Silakan coba lagi.", variant: "error" },
 };
 
 const toastStyles: Record<ToastVariant, { icon: typeof CheckCircle2; tone: string; progress: string }> = {

@@ -20,8 +20,8 @@ export default async function TempatSampahPage() {
     <div className="space-y-6 p-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Tempat Sampah Arsip</h1>
-          <p className="text-muted-foreground">Arsip yang dihapus dapat dipulihkan atau dihapus secara permanen.</p>
+          <h1 className="text-2xl font-bold tracking-tight">Arsip Akhir Retensi</h1>
+          <p className="text-muted-foreground">Daftar arsip yang telah mencapai akhir masa simpan atau dipindahkan. Arsip tetap tersimpan dan dapat dipulihkan bila diperlukan.</p>
         </div>
         <span className="rounded-full bg-muted px-3 py-1 text-sm font-medium text-muted-foreground">
           {arsip.length} arsip
@@ -30,9 +30,9 @@ export default async function TempatSampahPage() {
 
       {arsip.length === 0 ? (
         <div className="rounded-xl border bg-card p-8 text-center shadow-sm">
-          <p className="font-medium">Tempat sampah kosong</p>
+          <p className="font-medium">Tidak ada arsip di akhir retensi</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Belum ada arsip yang dihapus.
+            Belum ada arsip pada daftar penampungan akhir retensi.
           </p>
         </div>
       ) : (
