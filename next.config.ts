@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Excludes storage files from Next.js server output tracing only. The build
+  // guard separately rejects legacy files under public/ and scans .next output.
   outputFileTracingExcludes: {
     "/*": ["./storage/uploads/arsip/**/*", "./public/uploads/arsip/**/*"],
   },
