@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/check-private-uploads.mjs prebuild && next build && node scripts/check-private-uploads.mjs postbuild",
+    "build": "node scripts/check-private-uploads.mjs prebuild && prisma generate && next build && node scripts/check-private-uploads.mjs postbuild",
     "start": "next start",
     "lint": "eslint",
     "seed:users": "tsx scripts/seed-users.ts"
