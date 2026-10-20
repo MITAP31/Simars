@@ -28,7 +28,8 @@ model arsip {
   status_arsip        String    @default("tersimpan") @db.VarChar(50)
   keterangan          String?
   penulis_pengirim    String?   @db.VarChar(255)
-  status_retensi      String?   @db.VarChar(50) // MENUNGGU_KONFIRMASI | AKTIF | INAKTIF
+  status_retensi      String?   @db.VarChar(50) // AKTIF | INAKTIF | SELESAI
+  keputusan_retensi   String?   @db.VarChar(50) // SIMPAN | MUSNAH
   tanggal_dasar_retensi DateTime? @db.Date
   tanggal_mulai_aktif   DateTime? @db.Date
   tanggal_selesai_aktif DateTime? @db.Date
@@ -40,6 +41,7 @@ model arsip {
   divisi             divisi?              @relation(fields: [divisi_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_arsip_divisi")
   lokasi_penyimpanan lokasi_penyimpanan? @relation(fields: [lokasi_penyimpanan_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_arsip_lokasi_penyimpanan")
   jenis_arsip        jenis_arsip?        @relation(fields: [jenis_arsip_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  detail_penyerahan_arsip detail_penyerahan_arsip[]
 }
 
 // ======================================================
@@ -60,6 +62,7 @@ model kode_klasifikasi {
 
   arsip          arsip[]
   jadwal_retensi jadwal_retensi?
+  detail_penyerahan_arsip detail_penyerahan_arsip[]
 }
 
 // ======================================================
@@ -71,7 +74,7 @@ model jadwal_retensi {
   kode_klasifikasi_id    BigInt   @unique
   retensi_aktif          Int      @default(0)
   satuan_retensi_aktif   String   @default("Tahun") @db.VarChar(50)
-  dasar_perhitungan      String   @default("LANGSUNG") @db.VarChar(50) // LANGSUNG | SETELAH_TIDAK_BERLAKU | SETELAH_TAHUN_ANGGARAN_BERAKHIR | SETELAH_DIPERBAHARUI | LAINNYA
+  dasar_perhitungan      String   @default("LANGSUNG") @db.VarChar(255) // LANGSUNG | SETELAH_TIDAK_BERLAKU | SETELAH_TAHUN_ANGGARAN_BERAKHIR | SETELAH_DIPERBAHARUI | LAINNYA
   keterangan_dasar       String?  @db.Text
   retensi_inaktif        Int      @default(0)
   satuan_retensi_inaktif String   @default("Tahun") @db.VarChar(50)
@@ -98,6 +101,8 @@ model divisi {
   updated_at DateTime @updatedAt @db.Timestamp(6)
 
   arsip arsip[]
+  users user[]
+  penyerahan_arsip penyerahan_arsip[]
 }
 
 // ======================================================
@@ -114,6 +119,7 @@ model jenis_arsip {
   updated_at DateTime @updatedAt @db.Timestamp(6)
 
   arsip arsip[]
+  detail_penyerahan_arsip detail_penyerahan_arsip[]
 }
 
 // ======================================================
@@ -135,6 +141,7 @@ model lokasi_penyimpanan {
   parent   lokasi_penyimpanan?  @relation("LokasiPenyimpananHierarchy", fields: [parent_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   children lokasi_penyimpanan[] @relation("LokasiPenyimpananHierarchy")
   arsip    arsip[]
+  detail_penyerahan_arsip detail_penyerahan_arsip[]
 }
 
 // ======================================================
@@ -148,9 +155,17 @@ model user {
   email      String?  @unique @db.VarChar(255)
   password   String
   role       String   @default("user") @db.VarChar(50)
+  divisi_id  BigInt?
   aktif      Boolean  @default(true)
   created_at DateTime @default(now()) @db.Timestamp(6)
   updated_at DateTime @updatedAt @db.Timestamp(6)
+
+  divisi     divisi?  @relation(fields: [divisi_id], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "fk_user_divisi")
+  penyerahan_arsip penyerahan_arsip[] @relation("UserPenyerahan")
+  penyerahan_pihak_pertama penyerahan_arsip[] @relation("PenyerahanPihakPertama")
+  penyerahan_pihak_kedua penyerahan_arsip[] @relation("PenyerahanPihakKedua")
+
+  @@index([divisi_id], map: "idx_user_divisi_id")
 }
 
 // ======================================================
@@ -166,4 +181,71 @@ model pengaturan_sistem {
   notifikasi_aktif    Boolean  @default(true)
   created_at          DateTime @default(now()) @db.Timestamp(6)
   updated_at          DateTime @updatedAt @db.Timestamp(6)
+}
+
+// ======================================================
+// TABEL PENYERAHAN ARSIP (HEADER TRANSAKSI PENGAJUAN)
+// ======================================================
+
+model penyerahan_arsip {
+  id                 BigInt    @id @default(autoincrement())
+  user_id            BigInt
+  divisi_id          BigInt
+  tanggal_penyerahan DateTime  @default(now()) @db.Date
+  status             String    @default("DIBUAT") @db.VarChar(50) // DIBUAT
+  pihak_pertama_id   BigInt?
+  pihak_pertama_nama String?   @db.VarChar(255)
+  pihak_kedua_id     BigInt?
+  pihak_kedua_nama   String?   @db.VarChar(255)
+  sumber_penyerahan  String?   @db.VarChar(100)
+  nomor_berita_acara String?   @db.VarChar(100)
+  file_berita_acara  String?
+  keterangan         String?   @db.Text
+  created_at         DateTime  @default(now()) @db.Timestamp(6)
+  updated_at         DateTime  @updatedAt @db.Timestamp(6)
+
+  user               user      @relation("UserPenyerahan", fields: [user_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  divisi             divisi    @relation(fields: [divisi_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  pihak_pertama      user?     @relation("PenyerahanPihakPertama", fields: [pihak_pertama_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  pihak_kedua        user?     @relation("PenyerahanPihakKedua", fields: [pihak_kedua_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  details            detail_penyerahan_arsip[]
+
+  @@index([user_id])
+  @@index([divisi_id])
+  @@index([status])
+}
+
+// ======================================================
+// TABEL DETAIL PENYERAHAN ARSIP (DAFTAR ARSIP DIAJUKAN)
+// ======================================================
+
+model detail_penyerahan_arsip {
+  id                    BigInt    @id @default(autoincrement())
+  penyerahan_id         BigInt
+  kode_klasifikasi_id   BigInt
+  nama_arsip            String    @db.VarChar(255)
+  jenis_arsip_id        BigInt?
+  jumlah                Int       @default(1)
+  satuan                String?   @default("Berkas") @db.VarChar(50)
+  penulis_pengirim      String?   @db.VarChar(255)
+  kurun_waktu           String?   @db.VarChar(100)
+  tanggal_arsip         DateTime? @db.Date
+  tingkat_keaslian      String?   @default("Asli") @db.VarChar(50)
+  lokasi_penyimpanan_id BigInt?
+  file_arsip            String?
+  keterangan            String?   @db.Text
+  arsip_id              BigInt?
+  created_at            DateTime  @default(now()) @db.Timestamp(6)
+  updated_at            DateTime  @updatedAt @db.Timestamp(6)
+
+  penyerahan            penyerahan_arsip    @relation(fields: [penyerahan_id], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  kode_klasifikasi      kode_klasifikasi    @relation(fields: [kode_klasifikasi_id], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  jenis_arsip           jenis_arsip?        @relation(fields: [jenis_arsip_id], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  lokasi_penyimpanan    lokasi_penyimpanan? @relation(fields: [lokasi_penyimpanan_id], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  arsip                 arsip?              @relation(fields: [arsip_id], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([penyerahan_id])
+  @@index([kode_klasifikasi_id])
+  @@index([arsip_id])
 }

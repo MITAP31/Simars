@@ -1,12 +1,13 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { redirect, unstable_rethrow } from "next/navigation";
 
 import { prisma } from "@/lib/prisma";
 import {
-  SESSION_EXPIRY_DEFAULT,
-  SESSION_EXPIRY_REMEMBER,
+  SESSION_COOKIE_NAME,
   deleteSessionCookie,
+  revokeSessionToken,
   setSessionCookie,
   signSession,
   verifyAndUpgradePassword,
@@ -22,11 +23,9 @@ export async function loginAction(
 ): Promise<LoginState | undefined> {
   const usernameRaw = formData.get("username");
   const passwordRaw = formData.get("password");
-  const rememberRaw = formData.get("remember");
 
   const username = typeof usernameRaw === "string" ? usernameRaw.trim() : "";
   const password = typeof passwordRaw === "string" ? passwordRaw : "";
-  const remember = rememberRaw === "on" || rememberRaw === "true" || rememberRaw === "1";
 
   // 1. Validasi input dasar
   if (!username || !password) {
@@ -66,23 +65,18 @@ export async function loginAction(
       return { error: "Username atau password salah." };
     }
 
-    // 6. Tentukan durasi sesi (Remember Me vs Default)
-    const maxAgeSeconds = remember ? SESSION_EXPIRY_REMEMBER : SESSION_EXPIRY_DEFAULT;
+    // 6. Buat token bertanda tangan kriptografis HMAC-SHA256 (Absolute timeout 8 jam, Idle timeout 30 menit)
+    const token = await signSession({
+      userId: user.id.toString(),
+      username: user.username,
+      role: user.role,
+      divisiId: user.divisi_id ? user.divisi_id.toString() : null,
+    });
 
-    // 7. Buat token bertanda tangan kriptografis HMAC-SHA256
-    const token = await signSession(
-      {
-        userId: user.id.toString(),
-        username: user.username,
-        role: user.role,
-      },
-      maxAgeSeconds
-    );
+    // 7. Pasang HttpOnly Browser Session Cookie (tanpa persistent maxAge agar berakhir saat browser ditutup)
+    await setSessionCookie(token);
 
-    // 8. Pasang HttpOnly cookie
-    await setSessionCookie(token, maxAgeSeconds);
-
-    // 9. Arahkan ke dashboard sesuai role
+    // 8. Arahkan ke dashboard sesuai role yang sudah ada
     redirectTarget = user.role === "admin" ? "/admin/dashboard" : "/user/dashboard";
   } catch (error) {
     unstable_rethrow(error);
@@ -95,6 +89,17 @@ export async function loginAction(
 }
 
 export async function logoutAction() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+
+  // 1. Batalkan token sesi di server (revocation) sehingga tidak dapat dipakai lagi
+  if (token) {
+    await revokeSessionToken(token);
+  }
+
+  // 2. Hapus cookie sesi dari browser
   await deleteSessionCookie();
+
+  // 3. Arahkan kembali ke halaman login
   redirect("/login");
 }

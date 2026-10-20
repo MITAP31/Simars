@@ -42,6 +42,7 @@ export default async function DashboardLayout({
         nama_arsip: true,
         tanggal_arsip: true,
         status_retensi: true,
+        keputusan_retensi: true,
         tanggal_dasar_retensi: true,
         tanggal_mulai_aktif: true,
         tanggal_selesai_aktif: true,
@@ -71,7 +72,7 @@ export default async function DashboardLayout({
         currentDate,
       });
 
-      if (!calc || !needsArchiveRetentionReview(calc, archive.status_retensi)) {
+      if (!calc || !needsArchiveRetentionReview(calc, archive.keputusan_retensi, archive.status_retensi)) {
         return null;
       }
 

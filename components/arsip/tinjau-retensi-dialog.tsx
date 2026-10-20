@@ -179,14 +179,14 @@ export function TinjauRetensiDialog({
               </div>
               {data.dasar_perhitungan && (
                 <p className="mt-2 text-[11px] text-amber-700/80 dark:text-amber-400 border-t border-amber-200/60 dark:border-amber-900/40 pt-1.5">
-                  Dasar Perhitungan: {data.dasar_perhitungan}
+                  Keterangan Retensi Aktif: {data.dasar_perhitungan}
                 </p>
               )}
             </div>
 
             <div className="rounded-xl border border-border p-3.5 bg-muted/20 text-xs text-muted-foreground flex items-start gap-2">
               <Info className="h-4 w-4 shrink-0 mt-0.5 text-primary" />
-              <p>Keputusan akan disimpan pada arsip. Pemusnahan hanya memindahkan arsip ke area akhir retensi; data dan file tidak dihapus.</p>
+              <p>Keputusan peninjauan: Jika <strong>SIMPAN</strong>, arsip tetap disimpan normal. Jika <strong>MUSNAH</strong>, arsip masuk ke area Arsip Akhir Retensi (data dan file digital tetap aman dan tidak dihapus).</p>
             </div>
           </div>
 
@@ -202,15 +202,15 @@ export function TinjauRetensiDialog({
 
             <form action={reviewRetentionArsip}>
               <input type="hidden" name="id" value={data.id} />
-              <input type="hidden" name="keputusan" value="permanen" />
+              <input type="hidden" name="keputusan" value="simpan" />
               <input type="hidden" name="return_to" value={pathname} />
-              <button type="submit" className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 shadow-xs cursor-pointer transition-colors"><Archive className="h-3.5 w-3.5" />Pertahankan Permanen</button>
+              <button type="submit" className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 shadow-xs cursor-pointer transition-colors"><Archive className="h-3.5 w-3.5" />SIMPAN (Tetap Disimpan)</button>
             </form>
             <form action={reviewRetentionArsip}>
               <input type="hidden" name="id" value={data.id} />
-              <input type="hidden" name="keputusan" value="pemusnahan" />
+              <input type="hidden" name="keputusan" value="musnah" />
               <input type="hidden" name="return_to" value={pathname} />
-              <button type="submit" className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-lg bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-700 shadow-xs cursor-pointer transition-colors"><ShieldAlert className="h-3.5 w-3.5" />Ajukan / Proses Pemusnahan</button>
+              <button type="submit" className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-lg bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-700 shadow-xs cursor-pointer transition-colors"><ShieldAlert className="h-3.5 w-3.5" />MUSNAH (Arsip Akhir Retensi)</button>
             </form>
           </div>
         </div>

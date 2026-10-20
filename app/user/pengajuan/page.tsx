@@ -1,12 +1,165 @@
-import Link from "next/link";
-import { ArrowLeft, CheckCircle2, FileText, Info, Upload } from "lucide-react";
+import { prisma } from "@/lib/prisma";
+import { requireUser } from "@/lib/auth";
+import { getPenyerahanById } from "@/actions/penyerahan-arsip";
+import { isAvailableBeritaAcara } from "@/lib/penyerahan-files";
+import {
+  PenyerahanArsipView,
+  type KlasifikasiOption,
+  type LokasiOption,
+  type JenisArsipOption,
+  type PenyerahanListItem,
+} from "@/components/user/penyerahan-arsip-view";
 
-const inputClass = "w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-primary focus:ring-4 focus:ring-primary/10";
+export const dynamic = "force-dynamic";
 
-export default function PengajuanArsipPage() {
-  return <div className="mx-auto max-w-5xl space-y-6">
-    <div className="flex items-start gap-4"><Link href="/user/dashboard" className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-sky-100 bg-white text-primary shadow-sm transition hover:bg-sky-50"><ArrowLeft className="h-5 w-5" /></Link><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">SIMARS / Pengajuan</p><h1 className="mt-1 text-3xl font-bold tracking-tight">Ajukan Arsip Baru</h1><p className="mt-1 text-sm text-muted-foreground">Lengkapi informasi dokumen sebelum dikirim ke bagian arsip.</p></div></div>
-    <div className="grid gap-5 lg:grid-cols-[1fr_240px]"><form className="overflow-hidden rounded-2xl border border-sky-100 bg-card shadow-sm"><div className="border-b border-sky-100 bg-gradient-to-r from-sky-50 to-cyan-50/30 p-6"><div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-white"><FileText className="h-5 w-5" /></span><div><h2 className="font-semibold">Informasi Dokumen</h2><p className="text-sm text-muted-foreground">Data ini akan menjadi identitas arsip Anda.</p></div></div></div><div className="space-y-6 p-6"><Field label="Judul Dokumen"><input required type="text" placeholder="Contoh: Laporan Kegiatan Bulanan" className={inputClass} /></Field><div className="grid gap-5 sm:grid-cols-2"><Field label="Jenis Arsip"><select className={inputClass} defaultValue=""><option value="" disabled>Pilih jenis arsip</option><option>Surat Masuk</option><option>Surat Keluar</option><option>Dokumen Lainnya</option></select></Field><Field label="Kategori"><select className={inputClass} defaultValue=""><option value="" disabled>Pilih kategori</option><option>Administrasi</option><option>Keuangan</option><option>Kepegawaian</option><option>Laporan</option></select></Field></div><Field label="Tanggal Dokumen"><input type="date" className={inputClass} /></Field><Field label="Deskripsi"><textarea rows={4} placeholder="Tuliskan ringkasan atau keterangan dokumen..." className={`${inputClass} resize-none`} /></Field><Field label="File Dokumen"><div className="rounded-2xl border-2 border-dashed border-sky-200 bg-sky-50/60 p-7 text-center transition hover:border-primary hover:bg-sky-50"><div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary"><Upload className="h-6 w-6" /></div><p className="mt-3 text-sm font-semibold">Unggah dokumen</p><p className="mt-1 text-xs text-muted-foreground">PDF, DOC, atau DOCX · Maksimal 10 MB</p><label className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-primary shadow-sm ring-1 ring-sky-100 hover:bg-sky-50"><FileText className="h-4 w-4" />Pilih File<input type="file" className="hidden" accept=".pdf,.doc,.docx" /></label></div></Field><div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-6 sm:flex-row sm:justify-end"><Link href="/user/dashboard" className="rounded-xl border border-slate-200 px-5 py-2.5 text-center text-sm font-semibold hover:bg-slate-50">Batal</Link><button type="submit" className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-sky-900/15 transition hover:bg-primary/90">Kirim Pengajuan</button></div></div></form><aside className="h-fit rounded-2xl border border-amber-100 bg-amber-50/70 p-5"><div className="flex items-center gap-2 text-amber-800"><Info className="h-5 w-5" /><h2 className="font-semibold">Sebelum mengajukan</h2></div><ul className="mt-4 space-y-3 text-sm leading-5 text-amber-900/75"><li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />Pastikan dokumen mudah dibaca.</li><li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />Gunakan judul yang jelas dan spesifik.</li><li className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />Status pengajuan dapat dipantau di Riwayat.</li></ul></aside></div>
-  </div>;
+interface PenyerahanArsipPageProps {
+  searchParams?: Promise<{ edit?: string }>;
 }
-function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className="block space-y-2"><span className="text-sm font-semibold">{label}</span>{children}</label>; }
+
+export default async function PenyerahanArsipPage({
+  searchParams,
+}: PenyerahanArsipPageProps) {
+  const user = await requireUser();
+  const currentUserIdBigInt = BigInt(user.id);
+  const resolvedParams = searchParams ? await searchParams : undefined;
+  const editId = resolvedParams?.edit;
+
+  const [klasifikasiRaw, lokasiRaw, jenisArsipRaw, editData, penyerahanListRaw] =
+    await Promise.all([
+      prisma.kode_klasifikasi.findMany({
+        where: { aktif: true },
+        orderBy: { kode: "asc" },
+        select: { id: true, kode: true, nama: true },
+      }),
+      prisma.lokasi_penyimpanan.findMany({
+        where: { aktif: true },
+        orderBy: { kode: "asc" },
+        select: { id: true, kode: true, nama: true },
+      }),
+      prisma.jenis_arsip.findMany({
+        where: { aktif: true },
+        orderBy: { nama: "asc" },
+        select: { id: true, nama: true },
+      }),
+      editId ? getPenyerahanById(editId) : Promise.resolve(null),
+      user.divisi_id
+        ? prisma.penyerahan_arsip.findMany({
+            where: { divisi_id: BigInt(user.divisi_id) },
+            include: {
+              user: { select: { id: true, nama: true, username: true } },
+              divisi: { select: { kode: true, nama: true } },
+              pihak_kedua: { select: { nama: true, divisi: { select: { kode: true, nama: true } } } },
+              details: {
+                include: {
+                  kode_klasifikasi: { select: { id: true, kode: true, nama: true } },
+                  jenis_arsip: { select: { id: true, nama: true } },
+                  lokasi_penyimpanan: { select: { id: true, kode: true, nama: true } },
+                },
+              },
+            },
+            orderBy: { created_at: "desc" },
+          })
+        : Promise.resolve([]),
+    ]);
+
+  const klasifikasiOptions: KlasifikasiOption[] = klasifikasiRaw.map((k) => ({
+    id: k.id.toString(),
+    kode: k.kode,
+    nama: k.nama,
+  }));
+
+  const lokasiOptions: LokasiOption[] = lokasiRaw.map((l) => ({
+    id: l.id.toString(),
+    kode: l.kode,
+    nama: l.nama,
+  }));
+
+  const jenisArsipOptions: JenisArsipOption[] = jenisArsipRaw.map((j) => ({
+    id: j.id.toString(),
+    nama: j.nama,
+  }));
+
+  const initialList: PenyerahanListItem[] = penyerahanListRaw.map((p) => {
+    const firstDetail = p.details[0];
+    const isOwner = p.user_id === currentUserIdBigInt;
+
+    return {
+      id: p.id.toString(),
+      tanggal_penyerahan: (p.tanggal_penyerahan || p.created_at).toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }),
+      tanggal_arsip_raw: firstDetail?.tanggal_arsip
+        ? firstDetail.tanggal_arsip.toISOString().slice(0, 10)
+        : null,
+      status: p.status,
+      user_id: p.user_id.toString(),
+      user_nama: p.user?.nama || "Pengguna",
+      is_owner: isOwner,
+      can_edit: isOwner && p.status === "DIBUAT",
+      nomor_berita_acara: p.nomor_berita_acara || null,
+      file_berita_acara: p.file_berita_acara || null,
+      berita_acara_available: isAvailableBeritaAcara(p.file_berita_acara),
+      pihak_kedua_nama: p.pihak_kedua_nama || p.pihak_kedua?.nama || null,
+      pihak_kedua_divisi: p.pihak_kedua?.divisi ? `${p.pihak_kedua.divisi.kode} — ${p.pihak_kedua.divisi.nama}` : null,
+      divisi: p.divisi ? `${p.divisi.kode} — ${p.divisi.nama}` : null,
+      detail_id: firstDetail ? firstDetail.id.toString() : "",
+      kode_klasifikasi_id: firstDetail ? firstDetail.kode_klasifikasi_id.toString() : "",
+      kode_klasifikasi_kode: firstDetail?.kode_klasifikasi?.kode || "-",
+      kode_klasifikasi_nama: firstDetail?.kode_klasifikasi?.nama || "-",
+      nama_arsip: firstDetail?.nama_arsip || "Dokumen Arsip",
+      jenis_arsip_id: firstDetail?.jenis_arsip_id ? firstDetail.jenis_arsip_id.toString() : null,
+      jenis_arsip_nama: firstDetail?.jenis_arsip?.nama || null,
+      jumlah: firstDetail?.jumlah || 1,
+      satuan: firstDetail?.satuan || "Berkas",
+      penulis: firstDetail?.penulis_pengirim || null,
+      kurun_waktu: firstDetail?.kurun_waktu || null,
+      tingkat_keaslian: firstDetail?.tingkat_keaslian || "Asli",
+      lokasi_penyimpanan_id: firstDetail?.lokasi_penyimpanan_id
+        ? firstDetail.lokasi_penyimpanan_id.toString()
+        : null,
+      lokasi_penyimpanan_nama: firstDetail?.lokasi_penyimpanan
+        ? `${firstDetail.lokasi_penyimpanan.kode} - ${firstDetail.lokasi_penyimpanan.nama}`
+        : null,
+      file_arsip: firstDetail?.file_arsip || null,
+      keterangan: firstDetail?.keterangan || p.keterangan || null,
+      extra_details_count: p.details.length > 1 ? p.details.length - 1 : 0,
+      total_details_count: p.details.length,
+      all_details: p.details.map((d) => ({
+        id: d.id.toString(),
+        nama_arsip: d.nama_arsip,
+        jumlah: d.jumlah,
+        satuan: d.satuan || "Berkas",
+        kode_klasifikasi: d.kode_klasifikasi ? `${d.kode_klasifikasi.kode} - ${d.kode_klasifikasi.nama}` : "-",
+        file_arsip: d.file_arsip,
+        jenis_arsip: d.jenis_arsip?.nama || null,
+        penulis: d.penulis_pengirim,
+        kurun_waktu: d.kurun_waktu,
+        tanggal_arsip: d.tanggal_arsip?.toLocaleDateString("id-ID") || null,
+        tingkat_keaslian: d.tingkat_keaslian,
+        lokasi_penyimpanan: d.lokasi_penyimpanan ? `${d.lokasi_penyimpanan.kode} — ${d.lokasi_penyimpanan.nama}` : null,
+        keterangan: d.keterangan,
+      })),
+    };
+  });
+
+  return (
+    <div className="mx-auto max-w-7xl">
+      <PenyerahanArsipView
+        user={{
+          id: user.id,
+          nama: user.nama,
+          username: user.username,
+          divisi_id: user.divisi_id,
+          divisi: user.divisi,
+        }}
+        klasifikasiOptions={klasifikasiOptions}
+        lokasiOptions={lokasiOptions}
+        jenisArsipOptions={jenisArsipOptions}
+        initialList={initialList}
+        editData={editData}
+      />
+    </div>
+  );
+}

@@ -10,7 +10,7 @@ type ConfirmationDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
-  description: string;
+  description: string | React.ReactNode;
   confirmLabel: string;
   action: ServerAction;
   id: string;
@@ -101,7 +101,7 @@ export function ConfirmationDialog({
           <div className={`rounded-full p-2.5 ${iconTone}`}><Icon className="h-5 w-5" /></div>
           <div className="min-w-0 flex-1">
             <h2 id="confirmation-dialog-title" className="text-lg font-semibold">{title}</h2>
-            <p id="confirmation-dialog-description" className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
+            <div id="confirmation-dialog-description" className="mt-1 text-sm leading-6 text-muted-foreground">{description}</div>
           </div>
           <button type="button" className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => onOpenChange(false)} aria-label="Tutup dialog">
             <X className="h-4 w-4" />

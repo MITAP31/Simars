@@ -91,6 +91,7 @@ export default async function KategoriPage() {
           keterangan: category.keterangan,
           aktif: category.aktif,
           jumlahArsip: category._count.arsip,
+          created_at: category.created_at.toISOString(),
         }))}
       />
     </div>

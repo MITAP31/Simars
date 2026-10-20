@@ -75,17 +75,7 @@ export function JadwalRetensiForm({
     values.satuan_retensi_aktif ?? "Tahun"
   );
   const [dasarPerhitungan, setDasarPerhitungan] = useState(
-    values.dasar_perhitungan === "LANGSUNG"
-      ? "Langsung dihitung dari tanggal arsip"
-      : values.dasar_perhitungan === "SETELAH_TIDAK_BERLAKU"
-      ? "Setelah tidak berlaku"
-      : values.dasar_perhitungan === "SETELAH_TAHUN_ANGGARAN_BERAKHIR"
-      ? "Setelah tahun anggaran berakhir"
-      : values.dasar_perhitungan === "SETELAH_DIPERBAHARUI"
-      ? "Setelah diperbaharui"
-      : values.dasar_perhitungan === "LAINNYA"
-      ? values.keterangan_dasar || "Sesuai ketentuan khusus"
-      : values.dasar_perhitungan ?? ""
+    values.dasar_perhitungan ?? ""
   );
 
   const [retensiInaktif, setRetensiInaktif] = useState<number | string>(
@@ -271,7 +261,7 @@ export function JadwalRetensiForm({
 
             <div className="space-y-1.5">
               <label htmlFor="dasar_perhitungan" className="block text-xs font-medium text-foreground">
-                Dasar Perhitungan Retensi Aktif
+                Keterangan Retensi Aktif
               </label>
               <input
                 id="dasar_perhitungan"
@@ -279,11 +269,11 @@ export function JadwalRetensiForm({
                 type="text"
                 value={dasarPerhitungan}
                 onChange={(e) => setDasarPerhitungan(e.target.value)}
-                placeholder="Contoh: Setelah tidak berlaku"
+                placeholder="Contoh: Setelah tidak berlaku, atau setelah tindak lanjut selesai"
                 className={inputClass}
               />
               <p className="text-xs text-muted-foreground">
-                Opsional. Isi jika masa retensi dihitung berdasarkan kondisi tertentu.
+                Opsional. Catatan atau penjelasan naratif aturan JRA/SK.
               </p>
             </div>
 

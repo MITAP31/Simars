@@ -92,7 +92,7 @@ export default async function EditArsipPage({
             <Field label="Tahun"><input name="kurun_waktu" type="number" min="1900" max="2100" defaultValue={arsip.kurun_waktu ?? ""} className={inputClass} /></Field>
           </div>
           <div className="grid gap-6 md:grid-cols-2">
-            <Field label="Tanggal Dokumen"><input name="tanggal_arsip" type="date" defaultValue={formatDateInput(arsip.tanggal_arsip)} className={inputClass} /></Field>
+            <Field label="Tanggal Dokumen"><input name="tanggal_arsip" type="date" defaultValue={formatDateInput(arsip.tanggal_arsip)} className={inputClass} required /></Field>
             <Field label="Tingkat Keaslian"><select name="tingkat_keaslian" defaultValue={arsip.tingkat_keaslian ?? ""} className={inputClass}><option value="">Pilih tingkat keaslian</option><option value="Asli">Asli</option><option value="Salinan">Salinan</option><option value="Fotokopi">Fotokopi</option></select></Field>
           </div>
           <Field label="Lokasi Simpan"><select name="lokasi_penyimpanan_id" defaultValue={arsip.lokasi_penyimpanan_id?.toString() ?? ""} className={inputClass}><option value="">Pilih lokasi simpan</option>{storageLocations.map((location) => <option key={location.id.toString()} value={location.id.toString()} disabled={!location.aktif && location.id !== arsip.lokasi_penyimpanan_id}>{location.kode} — {location.nama}{!location.aktif ? " (Nonaktif)" : ""}</option>)}</select></Field>

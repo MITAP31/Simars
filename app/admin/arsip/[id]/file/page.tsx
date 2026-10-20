@@ -112,6 +112,8 @@ export default async function PreviewFileArsipPage({
   const fileName = arsip.file_arsip.split("/").pop() ?? "dokumen";
   const fileExt = getFileExtension(fileName);
   const fileInfo = getFileTypeDetails(fileExt);
+  const filePreviewUrl = `/api/arsip/${arsip.id.toString()}/file?mode=preview`;
+  const fileDownloadUrl = `/api/arsip/${arsip.id.toString()}/file?mode=download`;
 
   return (
     <div className="space-y-6 p-6">
@@ -144,7 +146,7 @@ export default async function PreviewFileArsipPage({
             Detail Arsip
           </Link>
           <a
-            href={arsip.file_arsip}
+            href={fileDownloadUrl}
             download
             className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 shadow-sm transition-colors"
           >
@@ -191,7 +193,7 @@ export default async function PreviewFileArsipPage({
               <span className="text-xs font-medium">Pratinjau PDF Interaktif</span>
             </div>
             <a
-              href={arsip.file_arsip}
+              href={fileDownloadUrl}
               download
               className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1"
             >
@@ -201,7 +203,7 @@ export default async function PreviewFileArsipPage({
           </div>
           <div className="p-3 bg-muted/10">
             <iframe
-              src={arsip.file_arsip}
+              src={filePreviewUrl}
               title={`Pratinjau ${arsip.nama_arsip}`}
               className="h-[750px] w-full rounded-lg border bg-white shadow-xs"
             />
@@ -217,7 +219,7 @@ export default async function PreviewFileArsipPage({
               <span className="text-xs font-medium">Pratinjau Berkas Gambar</span>
             </div>
             <a
-              href={arsip.file_arsip}
+              href={fileDownloadUrl}
               download
               className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1"
             >
@@ -228,7 +230,7 @@ export default async function PreviewFileArsipPage({
           <div className="flex min-h-[480px] items-center justify-center p-6 bg-muted/20">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={arsip.file_arsip}
+              src={filePreviewUrl}
               alt={arsip.nama_arsip}
               className="max-h-[75vh] max-w-full rounded-lg border bg-white object-contain shadow-sm"
             />
@@ -257,7 +259,7 @@ export default async function PreviewFileArsipPage({
             </p>
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
               <a
-                href={arsip.file_arsip}
+                href={fileDownloadUrl}
                 download
                 className="inline-flex items-center gap-2 rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 shadow-sm transition-colors"
               >
@@ -287,7 +289,7 @@ export default async function PreviewFileArsipPage({
             </p>
             <div className="mt-6">
               <a
-                href={arsip.file_arsip}
+                href={fileDownloadUrl}
                 download
                 className="inline-flex items-center gap-2 rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 shadow-sm transition-colors"
               >

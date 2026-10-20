@@ -16,8 +16,10 @@ export default async function KodeKlasifikasiPage({ searchParams }: { searchPara
     nama: classification.nama,
     jenis_klasifikasi: classification.jenis_klasifikasi,
     parent_id: classification.parent_id?.toString() ?? null,
+    is_induk: classification.is_induk,
     keterangan: classification.keterangan,
     aktif: classification.aktif,
+    created_at: classification.created_at.toISOString(),
   }));
 
   return <div className="space-y-6 p-6">

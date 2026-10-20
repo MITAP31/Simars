@@ -13,7 +13,14 @@ export default async function UserLayout({
 
   return (
     <div className="user-theme flex min-h-screen bg-background">
-      <UserSidebar />
+      <UserSidebar
+        user={{
+          name: user.nama,
+          role: "Pengguna",
+          username: user.username,
+          divisi: user.divisi ? `${user.divisi.kode} - ${user.divisi.nama}` : "Pengguna Divisi",
+        }}
+      />
 
       <div className="flex min-w-0 flex-1 flex-col">
         <UserHeader user={{ name: user.nama, role: "Pengguna", username: user.username }} />

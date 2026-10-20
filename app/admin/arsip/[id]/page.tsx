@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, CheckCircle2, Clock, Download, Eye, FileIcon, FileText, FileX, ImageIcon, Pencil } from "lucide-react";
 
 import { prisma } from "@/lib/prisma";
-import { calculateRetention, hasPermanentRetentionDecision, needsArchiveRetentionReview } from "@/lib/retensi";
+import { calculateRetention, needsArchiveRetentionReview } from "@/lib/retensi";
 
 import { DetailTinjauRetensiButton } from "@/components/arsip/detail-tinjau-retensi-button";
 
@@ -102,13 +102,13 @@ export default async function DetailArsipPage({
     ? `${arsip.lokasi_penyimpanan.kode} — ${arsip.lokasi_penyimpanan.nama}`
     : "—";
 
-  // Perhitungan dinamis jika ada Jadwal Retensi:
-  // Menjamin data lama (seperti TEST-RETENSI) yang kolomnya masih NULL tetap tampil akurat tanpa ubah database.
-  const dynamicRetention = arsip.kode_klasifikasi.jadwal_retensi && arsip.kode_klasifikasi.jadwal_retensi.aktif
+  // Perhitungan dinamis jika ada Jadwal Retensi
+  const schedule = arsip.kode_klasifikasi.jadwal_retensi;
+  const dynamicRetention = schedule && schedule.aktif
     ? calculateRetention({
         tanggalArsip: arsip.tanggal_arsip,
         tanggalDasarKhusus: arsip.tanggal_dasar_retensi,
-        jadwalRetensi: arsip.kode_klasifikasi.jadwal_retensi,
+        jadwalRetensi: schedule,
       })
     : null;
 
@@ -116,12 +116,14 @@ export default async function DetailArsipPage({
   const displayMulaiAktif = arsip.tanggal_mulai_aktif ?? dynamicRetention?.tanggal_mulai_aktif ?? null;
   const displaySelesaiAktif = arsip.tanggal_selesai_aktif ?? dynamicRetention?.tanggal_selesai_aktif ?? null;
   const displaySelesaiInaktif = arsip.tanggal_selesai_inaktif ?? dynamicRetention?.tanggal_selesai_inaktif ?? null;
-  const hasPermanentDecision = hasPermanentRetentionDecision(arsip.status_retensi);
-  const displayStatusRetensi = hasPermanentDecision ? "SELESAI_RETENSI_PERMANEN" : arsip.status_retensi ?? dynamicRetention?.status_retensi ?? null;
-  const displayNasibAkhir = arsip.kode_klasifikasi.jadwal_retensi?.keterangan_akhir;
 
-  const schedule = arsip.kode_klasifikasi.jadwal_retensi;
-  const isPerluPeninjauan = needsArchiveRetentionReview(dynamicRetention, arsip.status_retensi);
+  const rawStatus = arsip.status_retensi ?? dynamicRetention?.status_retensi ?? null;
+  const isSelesai = rawStatus === "SELESAI" || rawStatus === "SELESAI_RETENSI" || arsip.status_retensi === "SELESAI_RETENSI_PERMANEN" || arsip.status_retensi === "SELESAI_RETENSI_DIMUSNAHKAN";
+  const displayStatusRetensi = isSelesai ? "SELESAI" : rawStatus;
+  const displayNasibAkhir = schedule?.keterangan_akhir;
+  const keputusan = arsip.keputusan_retensi;
+
+  const isPerluPeninjauan = needsArchiveRetentionReview(dynamicRetention, arsip.keputusan_retensi, arsip.status_retensi);
 
   const reviewData =
     isPerluPeninjauan && schedule
@@ -137,7 +139,7 @@ export default async function DetailArsipPage({
           tanggal_selesai_aktif: formatDate(displaySelesaiAktif),
           tanggal_selesai_inaktif: formatDate(displaySelesaiInaktif),
           nasib_akhir: schedule.keterangan_akhir,
-          status_retensi: dynamicRetention?.label_status ?? "Selesai Retensi (Perlu Peninjauan)",
+          status_retensi: "Selesai Retensi (Perlu Peninjauan)",
         }
       : null;
 
@@ -174,7 +176,13 @@ export default async function DetailArsipPage({
           <InformationField label="Keterangan" value={arsip.keterangan ?? "—"} fullWidth />
           <div>
             <p className="text-sm text-muted-foreground">Status Arsip</p>
-            <span className="mt-2 inline-flex rounded-full bg-muted px-3 py-1 text-xs font-medium">{arsip.status_arsip}</span>
+            <span className="mt-2 inline-flex rounded-full bg-muted px-3 py-1 text-xs font-medium">
+              {arsip.status_arsip === "akhir_retensi"
+                ? "Akhir Retensi"
+                : arsip.status_arsip === "dihapus"
+                ? "Dihapus"
+                : "Tersimpan"}
+            </span>
           </div>
           <InformationField label="ID Arsip" value={arsip.id.toString()} />
           <InformationField label="Dibuat pada" value={formatDateTime(arsip.created_at)} />
@@ -197,11 +205,9 @@ export default async function DetailArsipPage({
                     ? "bg-emerald-100 text-emerald-800"
                     : displayStatusRetensi === "INAKTIF"
                     ? "bg-amber-100 text-amber-800"
-                    : hasPermanentDecision
+                    : displayNasibAkhir === "PERMANEN" || keputusan === "SIMPAN" || arsip.status_retensi === "SELESAI_RETENSI_PERMANEN"
                     ? "bg-blue-100 text-blue-800"
-                    : displayNasibAkhir === "PERMANEN"
-                    ? "bg-blue-100 text-blue-800"
-                    : displayNasibAkhir === "MUSNAH"
+                    : displayNasibAkhir === "MUSNAH" || keputusan === "MUSNAH" || arsip.status_retensi === "SELESAI_RETENSI_DIMUSNAHKAN" || arsip.status_arsip === "akhir_retensi"
                     ? "bg-rose-100 text-rose-800"
                     : "bg-purple-100 text-purple-800"
                 }`}
@@ -210,13 +216,15 @@ export default async function DetailArsipPage({
                   ? "Retensi Aktif"
                   : displayStatusRetensi === "INAKTIF"
                   ? "Retensi Inaktif"
-                  : hasPermanentDecision
-                  ? "Permanen"
                   : displayNasibAkhir === "PERMANEN"
-                  ? "Permanen"
+                  ? "Selesai (Disimpan Permanen)"
+                  : keputusan === "SIMPAN" || arsip.status_retensi === "SELESAI_RETENSI_PERMANEN"
+                  ? "Selesai (Disimpan - Keputusan Admin)"
                   : displayNasibAkhir === "MUSNAH"
-                  ? "Perlu Tindakan (Pemusnahan)"
-                  : "Perlu Tindakan (Peninjauan)"}
+                  ? "Selesai (Arsip Akhir Retensi)"
+                  : keputusan === "MUSNAH" || arsip.status_retensi === "SELESAI_RETENSI_DIMUSNAHKAN" || arsip.status_arsip === "akhir_retensi"
+                  ? "Selesai (Akhir Retensi - Keputusan Admin)"
+                  : "Selesai (Perlu Review Admin)"}
               </span>
             ) : (
               <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
@@ -233,17 +241,25 @@ export default async function DetailArsipPage({
                 ? "Retensi Aktif"
                 : displayStatusRetensi === "INAKTIF"
                 ? "Retensi Inaktif"
-                : hasPermanentDecision
-                ? "Permanen (Keputusan Admin)"
-                : displayStatusRetensi === "SELESAI_RETENSI"
+                : displayStatusRetensi === "SELESAI"
                 ? displayNasibAkhir === "PERMANEN"
-                  ? "Permanen (Disimpan Permanen)"
+                  ? "Selesai Retensi (Disimpan Permanen)"
+                  : keputusan === "SIMPAN" || arsip.status_retensi === "SELESAI_RETENSI_PERMANEN"
+                  ? "Selesai Retensi (Tetap Disimpan)"
                   : displayNasibAkhir === "MUSNAH"
-                  ? "Perlu Tindakan (Siap Dimusnahkan)"
-                  : "Perlu Peninjauan (Ada Pengecualian)"
+                  ? "Selesai Retensi (Arsip Akhir Retensi)"
+                  : keputusan === "MUSNAH" || arsip.status_retensi === "SELESAI_RETENSI_DIMUSNAHKAN" || arsip.status_arsip === "akhir_retensi"
+                  ? "Selesai Retensi (Arsip Akhir Retensi)"
+                  : "Selesai Retensi (Perlu Peninjauan)"
                 : "—"}
             </p>
           </div>
+          {keputusan && (
+            <InformationField
+              label="Keputusan Review Retensi"
+              value={keputusan === "SIMPAN" ? "SIMPAN (Tetap Disimpan)" : "MUSNAH (Arsip Akhir Retensi)"}
+            />
+          )}
           <InformationField
             label="Mulai Retensi"
             value={formatDate(displayMulaiAktif)}
@@ -257,28 +273,28 @@ export default async function DetailArsipPage({
             value={formatDate(displaySelesaiInaktif)}
           />
           <InformationField
-            label="Nasib Akhir"
+            label="Nasib Akhir Master"
             value={
               displayNasibAkhir === "PERMANEN"
                 ? "Disimpan Permanen"
                 : displayNasibAkhir === "MUSNAH"
                 ? "Dimusnahkan"
                 : displayNasibAkhir === "MUSNAH_DENGAN_KETERANGAN_KHUSUS"
-                ? "Perlu Peninjauan"
+                ? `Musnah dengan Keterangan Khusus${schedule?.keterangan_khusus ? ` (${schedule.keterangan_khusus})` : ""}`
                 : "—"
             }
           />
           <InformationField
             label="Jadwal Retensi"
             value={
-              arsip.kode_klasifikasi.jadwal_retensi
-                ? `${arsip.kode_klasifikasi.jadwal_retensi.retensi_aktif} ${arsip.kode_klasifikasi.jadwal_retensi.satuan_retensi_aktif} Aktif + ${arsip.kode_klasifikasi.jadwal_retensi.retensi_inaktif} ${arsip.kode_klasifikasi.jadwal_retensi.satuan_retensi_inaktif} Inaktif`
+              schedule
+                ? `${schedule.retensi_aktif} ${schedule.satuan_retensi_aktif} Aktif + ${schedule.retensi_inaktif} ${schedule.satuan_retensi_inaktif} Inaktif`
                 : "Tidak ada jadwal retensi aktif"
             }
           />
           <InformationField
-            label="Dasar Perhitungan"
-            value={arsip.kode_klasifikasi.jadwal_retensi?.dasar_perhitungan || "Sesuai Tanggal Arsip"}
+            label="Keterangan Retensi Aktif"
+            value={schedule?.dasar_perhitungan || "—"}
             fullWidth
           />
         </div>
@@ -320,7 +336,7 @@ export default async function DetailArsipPage({
                   Lihat File
                 </Link>
                 <a
-                  href={arsip.file_arsip}
+                  href={`/api/arsip/${arsip.id.toString()}/file?mode=download`}
                   download
                   className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted transition-colors"
                 >

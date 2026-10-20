@@ -59,7 +59,7 @@ export default async function TambahArsipPage() {
             <Field label="Tahun"><input name="kurun_waktu" type="number" min="1900" max="2100" placeholder="Contoh: 2026" className={inputClass} /></Field>
           </div>
           <div className="grid gap-6 md:grid-cols-2">
-            <Field label="Tanggal Dokumen"><input name="tanggal_arsip" type="date" className={inputClass} /></Field>
+            <Field label="Tanggal Dokumen"><input name="tanggal_arsip" type="date" className={inputClass} required /></Field>
             <Field label="Tingkat Keaslian"><select name="tingkat_keaslian" defaultValue="" className={inputClass}><option value="" disabled>Pilih tingkat keaslian</option><option value="Asli">Asli</option><option value="Salinan">Salinan</option><option value="Fotokopi">Fotokopi</option></select></Field>
           </div>
           <Field label="Lokasi Simpan"><select name="lokasi_penyimpanan_id" defaultValue="" className={inputClass}><option value="">Cari atau pilih lokasi simpan</option>{storageLocations.map((location) => <option key={location.id.toString()} value={location.id.toString()}>{location.kode} — {location.nama}</option>)}</select></Field>

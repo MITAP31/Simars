@@ -96,17 +96,8 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Remember */}
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 text-sm text-sky-800 cursor-pointer">
-                <input
-                  type="checkbox"
-                  name="remember"
-                  className="h-4 w-4 rounded border-sky-300 bg-white accent-cyan-600"
-                />
-                Ingat saya
-              </label>
-
+            {/* Forgot password link */}
+            <div className="flex items-center justify-end">
               <button
                 type="button"
                 onClick={() => setShowForgotNotice(true)}

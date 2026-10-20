@@ -1,4 +1,4 @@
-import { Clock, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -45,6 +45,7 @@ export default async function JadwalRetensiPage() {
     keterangan_dasar: item.keterangan_dasar,
     keterangan_khusus: item.keterangan_khusus,
     aktif: item.aktif,
+    created_at: item.created_at.toISOString(),
     kode_klasifikasi: {
       id: item.kode_klasifikasi.id.toString(),
       kode: item.kode_klasifikasi.kode,
@@ -61,11 +62,16 @@ export default async function JadwalRetensiPage() {
             Pedoman masa simpan (retensi aktif dan inaktif) serta nasib akhir arsip berdasarkan kode klasifikasi.
           </p>
         </div>
+        <Link
+          href="/admin/master-data/jadwal-retensi/tambah"
+          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 shadow-sm transition-colors"
+        >
+          <Plus className="h-4 w-4" />
+          Tambah Jadwal Retensi
+        </Link>
       </div>
 
       <JadwalRetensiList initialItems={serializedList} />
     </div>
   );
 }
-
-

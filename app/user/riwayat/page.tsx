@@ -1,6 +1,128 @@
-import { CheckCircle2, Clock3, Eye, FileText, Search, XCircle } from "lucide-react";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import {
+  RiwayatPenyerahanView,
+  type RiwayatItem,
+  type RiwayatStats,
+} from "@/components/user/riwayat-penyerahan-view";
 
-const riwayat = [{ id: "ARS-001", judul: "Laporan Kegiatan Bulanan", kategori: "Laporan", tanggal: "30 Agustus 2026", status: "Disetujui" }, { id: "ARS-002", judul: "Surat Permohonan Data", kategori: "Administrasi", tanggal: "31 Agustus 2026", status: "Menunggu" }, { id: "ARS-003", judul: "Dokumen Keuangan", kategori: "Keuangan", tanggal: "28 Agustus 2026", status: "Ditolak" }];
-const stats = [{ label: "Total", value: "12", icon: FileText, color: "sky" }, { label: "Menunggu", value: "3", icon: Clock3, color: "amber" }, { label: "Disetujui", value: "9", icon: CheckCircle2, color: "emerald" }];
-export default function RiwayatPage() { return <div className="mx-auto max-w-7xl space-y-6"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">SIMARS / Riwayat</p><h1 className="mt-1 text-3xl font-bold tracking-tight">Riwayat Pengajuan</h1><p className="mt-1 text-sm text-muted-foreground">Pantau seluruh dokumen yang pernah dikirimkan.</p></div><section className="grid gap-4 sm:grid-cols-3">{stats.map(({ label, value, icon: Icon, color }) => <div key={label} className="flex items-center gap-4 rounded-2xl border border-sky-100 bg-card p-5 shadow-sm"><span className={`rounded-xl p-3 ${color === "sky" ? "bg-sky-100 text-sky-700" : color === "amber" ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}><Icon className="h-5 w-5" /></span><div><p className="text-sm text-muted-foreground">{label}</p><p className="text-2xl font-bold">{value}</p></div></div>)}</section><section className="overflow-hidden rounded-2xl border border-sky-100 bg-card shadow-sm"><div className="flex flex-col gap-4 border-b border-sky-100 bg-sky-50/70 p-5 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold">Daftar Pengajuan</h2><p className="text-sm text-muted-foreground">Status terbaru pengajuan arsip Anda.</p></div><div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input placeholder="Cari dokumen..." className="w-full rounded-xl border border-sky-100 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:ring-4 focus:ring-primary/10 sm:w-52" /></div></div><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3 font-semibold">Dokumen</th><th className="px-5 py-3 font-semibold">Kategori</th><th className="px-5 py-3 font-semibold">Tanggal</th><th className="px-5 py-3 font-semibold">Status</th><th className="px-5 py-3 text-right font-semibold">Aksi</th></tr></thead><tbody>{riwayat.map((item) => <tr key={item.id} className="border-t border-sky-50 transition hover:bg-sky-50/50"><td className="px-5 py-4"><div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-100 text-primary"><FileText className="h-4 w-4" /></span><div><p className="font-semibold">{item.judul}</p><p className="mt-0.5 text-xs text-muted-foreground">{item.id}</p></div></div></td><td className="px-5 py-4 text-muted-foreground">{item.kategori}</td><td className="px-5 py-4 text-muted-foreground">{item.tanggal}</td><td className="px-5 py-4"><Status status={item.status} /></td><td className="px-5 py-4 text-right"><button className="inline-flex items-center gap-1.5 rounded-lg border border-sky-100 bg-white px-3 py-2 text-xs font-semibold text-primary hover:bg-sky-50"><Eye className="h-3.5 w-3.5" />Detail</button></td></tr>)}</tbody></table></div></section></div>; }
-function Status({ status }: { status: string }) { const rejected = status === "Ditolak"; const approved = status === "Disetujui"; return <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${approved ? "bg-emerald-100 text-emerald-700" : rejected ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>{approved ? <CheckCircle2 className="h-3.5 w-3.5" /> : rejected ? <XCircle className="h-3.5 w-3.5" /> : <Clock3 className="h-3.5 w-3.5" />}{status}</span>; }
+export const dynamic = "force-dynamic";
+
+const dateFormatter = new Intl.DateTimeFormat("id-ID", {
+  day: "2-digit",
+  month: "long",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+function formatDate(date: Date | null | undefined) {
+  return date ? dateFormatter.format(date) : "—";
+}
+
+export default async function RiwayatPenyerahanPage() {
+  const user = await requireUser();
+  const currentUserIdBigInt = BigInt(user.id);
+
+  const now = new Date();
+  // Awal bulan berjalan (UTC) untuk filter tanggal_penyerahan
+  const startOfMonth = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)
+  );
+
+  // ============================================================
+  // SUMBER DATA: penyerahan_arsip milik user yang sedang login
+  // Scope: user_id = currentUserId (BUKAN divisi_id)
+  // ============================================================
+  const [totalPenyerahan, penyerahanBulanIni, sumKuantitas, penyerahanList] =
+    await Promise.all([
+      // 1. Total penyerahan milik user ini
+      prisma.penyerahan_arsip.count({
+        where: { user_id: currentUserIdBigInt },
+      }),
+
+      // 2. Penyerahan bulan berjalan milik user ini
+      prisma.penyerahan_arsip.count({
+        where: {
+          user_id: currentUserIdBigInt,
+          tanggal_penyerahan: { gte: startOfMonth },
+        },
+      }),
+
+      // 3. SUM jumlah berkas dari detail seluruh penyerahan milik user ini
+      prisma.detail_penyerahan_arsip.aggregate({
+        where: {
+          penyerahan: { user_id: currentUserIdBigInt },
+        },
+        _sum: { jumlah: true },
+      }),
+
+      // 4. List penyerahan milik user ini beserta detail & relasi
+      prisma.penyerahan_arsip.findMany({
+        where: { user_id: currentUserIdBigInt },
+        include: {
+          divisi: { select: { kode: true, nama: true } },
+          details: {
+            include: {
+              kode_klasifikasi: { select: { kode: true, nama: true } },
+              jenis_arsip: { select: { nama: true } },
+              lokasi_penyimpanan: { select: { kode: true, nama: true } },
+            },
+            orderBy: { id: "asc" },
+          },
+        },
+        orderBy: { tanggal_penyerahan: "desc" },
+      }),
+    ]);
+
+  const totalArsipDiserahkan =
+    typeof sumKuantitas._sum.jumlah === "number" && sumKuantitas._sum.jumlah > 0
+      ? sumKuantitas._sum.jumlah
+      : 0;
+
+  const stats: RiwayatStats = {
+    totalPenyerahan,
+    penyerahanBulanIni,
+    totalArsipDiserahkan,
+  };
+
+  // ============================================================
+  // MAPPING: 1 penyerahan = 1 baris di tabel (data dari first detail)
+  // Jika penyerahan punya banyak detail, extra_details_count > 0
+  // ============================================================
+  const items: RiwayatItem[] = penyerahanList.map((p) => {
+    const firstDetail = p.details[0];
+
+    return {
+      id: p.id.toString(),
+      detail_id: firstDetail ? firstDetail.id.toString() : "",
+      // Header penyerahan
+      tanggal_penyerahan: formatDate(p.tanggal_penyerahan),
+      status: p.status,
+      divisi: p.divisi ? `${p.divisi.kode} - ${p.divisi.nama}` : "-",
+      // Detail arsip (dari detail_penyerahan_arsip)
+      nama_arsip: firstDetail?.nama_arsip || "Dokumen Arsip",
+      kode_klasifikasi: firstDetail?.kode_klasifikasi
+        ? `${firstDetail.kode_klasifikasi.kode} - ${firstDetail.kode_klasifikasi.nama}`
+        : "-",
+      jenis_arsip: firstDetail?.jenis_arsip?.nama || "-",
+      jumlah: firstDetail?.jumlah ?? 1,
+      satuan: firstDetail?.satuan || "Berkas",
+      penulis: firstDetail?.penulis_pengirim || "-",
+      kurun_waktu: firstDetail?.kurun_waktu || "-",
+      tanggal_arsip: formatDate(firstDetail?.tanggal_arsip ?? null),
+      tingkat_keaslian: firstDetail?.tingkat_keaslian || "Asli",
+      lokasi_penyimpanan: firstDetail?.lokasi_penyimpanan
+        ? `${firstDetail.lokasi_penyimpanan.kode} - ${firstDetail.lokasi_penyimpanan.nama}`
+        : "-",
+      file_arsip: firstDetail?.file_arsip || null,
+      // Jumlah detail lainnya (jika penyerahan memiliki lebih dari 1 detail)
+      extra_details_count: p.details.length > 1 ? p.details.length - 1 : 0,
+    };
+  });
+
+  return (
+    <div className="mx-auto max-w-7xl">
+      <RiwayatPenyerahanView stats={stats} items={items} />
+    </div>
+  );
+}

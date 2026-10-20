@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { KeyRound, MoreVertical, Pencil, UserCheck, UserX } from "lucide-react";
+import { KeyRound, MoreVertical, Pencil, Trash2, UserCheck, UserX } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import { toggleUserStatus } from "@/actions/pengguna";
+import { deleteUser, toggleUserStatus } from "@/actions/pengguna";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { ResetPasswordDialog } from "@/components/pengguna/reset-password-dialog";
 
@@ -30,6 +30,7 @@ export function PenggunaActions({
   const [isOpen, setIsOpen] = useState(false);
   const [isResetOpen, setIsResetOpen] = useState(false);
   const [isStatusDialogOpen, setIsStatusDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
 
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -38,6 +39,7 @@ export function PenggunaActions({
   const isSelf = user.id === currentUserId;
   const isLastActiveAdmin = user.role === "admin" && user.aktif && activeAdminCount <= 1;
   const canDeactivate = !isSelf && !isLastActiveAdmin;
+  const canDelete = !isSelf && !isLastActiveAdmin;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -159,6 +161,31 @@ export function PenggunaActions({
                 Aktifkan Akun
               </button>
             )}
+
+            <div className="my-1 border-t border-border/60" />
+
+            {/* Hapus Pengguna */}
+            {canDelete ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                onClick={() => {
+                  setIsOpen(false);
+                  setIsDeleteDialogOpen(true);
+                }}
+              >
+                <Trash2 className="h-4 w-4" />
+                Hapus Pengguna
+              </button>
+            ) : (
+              <div
+                className="px-2.5 py-2 text-[11px] text-muted-foreground italic cursor-not-allowed opacity-75"
+                title={isSelf ? "Tidak dapat menghapus akun sendiri" : "Admin aktif terakhir tidak dapat dihapus"}
+              >
+                {isSelf ? "Akun Anda sendiri" : "Admin aktif terakhir"}
+              </div>
+            )}
           </div>,
           document.body
         )}
@@ -177,6 +204,31 @@ export function PenggunaActions({
         action={toggleUserStatus}
         id={user.id}
         variant={user.aktif ? "destructive" : "default"}
+      />
+
+      {/* Dialog Konfirmasi Hapus Pengguna */}
+      <ConfirmationDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        title="Hapus Pengguna?"
+        description={
+          <div className="space-y-3">
+            <p>
+              Pengguna ini akan dihapus secara permanen dari sistem dan tidak dapat dipulihkan kembali.
+            </p>
+            <div className="rounded-lg border bg-muted/50 p-2.5 text-xs text-foreground font-medium space-y-0.5">
+              <div>Nama: {user.nama}</div>
+              <div>Username: @{user.username}</div>
+            </div>
+            <p className="text-xs font-medium text-destructive">
+              Tindakan ini tidak dapat dibatalkan.
+            </p>
+          </div>
+        }
+        confirmLabel="Hapus Pengguna"
+        action={deleteUser}
+        id={user.id}
+        variant="destructive"
       />
 
       {/* Dialog Reset Password */}

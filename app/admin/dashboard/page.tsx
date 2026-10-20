@@ -36,24 +36,54 @@ function path(values: number[], maxValue: number) {
 
 export default async function DashboardPage() {
   const currentDate = new Date();
-  const [archives, finalRetentionCount, recentArchives] = await Promise.all([
-    prisma.arsip.findMany({ select: { id: true, nomor_arsip: true, nama_arsip: true, status_arsip: true, status_retensi: true, tanggal_arsip: true, tanggal_dasar_retensi: true, created_at: true, updated_at: true, kode_klasifikasi: { select: { jadwal_retensi: true } } } }),
-    prisma.arsip.count({ where: { status_arsip: "dihapus" } }),
-    prisma.arsip.findMany({ select: { id: true, nama_arsip: true, status_arsip: true, created_at: true, updated_at: true }, orderBy: { updated_at: "desc" }, take: 5 }),
+  const [archives, recentArchives] = await Promise.all([
+    prisma.arsip.findMany({
+      select: {
+        id: true,
+        nomor_arsip: true,
+        nama_arsip: true,
+        status_arsip: true,
+        status_retensi: true,
+        keputusan_retensi: true,
+        tanggal_arsip: true,
+        tanggal_dasar_retensi: true,
+        created_at: true,
+        updated_at: true,
+        kode_klasifikasi: { select: { jadwal_retensi: true } },
+      },
+    }),
+    prisma.arsip.findMany({
+      select: { id: true, nama_arsip: true, status_arsip: true, created_at: true, updated_at: true },
+      orderBy: { updated_at: "desc" },
+      take: 5,
+    }),
   ]);
 
   const classify = (archive: (typeof archives)[number], date: Date) => {
-    if (archive.status_arsip === "dihapus") return "end" as const;
+    if (archive.status_arsip === "dihapus") return "deleted" as const;
+    if (archive.status_arsip === "akhir_retensi") return "end" as const;
     const schedule = archive.kode_klasifikasi.jadwal_retensi;
-    const retention = schedule?.aktif ? calculateRetention({ tanggalArsip: archive.tanggal_arsip, tanggalDasarKhusus: archive.tanggal_dasar_retensi, jadwalRetensi: schedule, currentDate: date }) : null;
-    if (needsArchiveRetentionReview(retention, archive.status_retensi)) return "review" as const;
-    if (isArchivedRetentionEnd(retention) || retention?.status_retensi === "SELESAI_RETENSI") return "end" as const;
+    const retention = schedule?.aktif
+      ? calculateRetention({
+          tanggalArsip: archive.tanggal_arsip,
+          tanggalDasarKhusus: archive.tanggal_dasar_retensi,
+          jadwalRetensi: schedule,
+          currentDate: date,
+        })
+      : null;
+    if (needsArchiveRetentionReview(retention, archive.keputusan_retensi, archive.status_retensi)) return "review" as const;
+    if (isArchivedRetentionEnd(retention, archive.keputusan_retensi, archive.status_arsip)) return "end" as const;
     if (retention?.status_retensi === "INAKTIF" || (!retention && archive.status_retensi === "INAKTIF")) return "inactive" as const;
     return "active" as const;
   };
 
   const currentCounts = { active: 0, inactive: 0, review: 0, end: 0 };
-  for (const archive of archives) currentCounts[classify(archive, currentDate)]++;
+  for (const archive of archives) {
+    const cat = classify(archive, currentDate);
+    if (cat !== "deleted") {
+      currentCounts[cat]++;
+    }
+  }
   const operationalArchiveCount = currentCounts.active + currentCounts.inactive + currentCounts.review;
   const statusTotal = Object.values(currentCounts).reduce((sum, value) => sum + value, 0);
 
@@ -86,7 +116,7 @@ export default async function DashboardPage() {
   const statCards = [
     { title: "Total Arsip", value: operationalArchiveCount, description: "arsip tersimpan", icon: Files, href: "/admin/arsip", tone: "bg-sky-50 text-sky-600 dark:bg-sky-950/40 dark:text-sky-400" },
     { title: "Perlu Ditinjau", value: currentCounts.review, description: "arsip perlu tindakan", icon: Clock3, href: "/admin/arsip?retensi=perlu_tindakan", tone: "bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400" },
-    { title: "Arsip Akhir Retensi", value: finalRetentionCount, description: "di area akhir retensi", icon: ArchiveRestore, href: "/admin/arsip/tempat-sampah", tone: "bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400" },
+    { title: "Arsip Akhir Retensi", value: currentCounts.end, description: "di area akhir retensi", icon: ArchiveRestore, href: "/admin/arsip/akhir-retensi", tone: "bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400" },
     { title: "Arsip Aktif", value: currentCounts.active, description: "masih dalam masa aktif", icon: CheckCircle2, href: "/admin/arsip?retensi=aktif", tone: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400" },
   ];
 
@@ -99,7 +129,7 @@ export default async function DashboardPage() {
 
       <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-xs xl:col-span-3"><h2 className="font-semibold">Status Retensi</h2><p className="mt-1 text-xs text-muted-foreground">Distribusi arsip saat ini</p><div className="mt-5 flex items-center justify-center"><div className="relative h-40 w-40"><svg viewBox="0 0 42 42" className="h-full w-full -rotate-90"><circle cx="21" cy="21" r="15.9155" fill="none" stroke="currentColor" strokeWidth="6" className="text-muted" />{donutSegments.map((segment) => <circle key={segment.label} cx="21" cy="21" r="15.9155" fill="none" stroke={segment.color} strokeWidth="6" strokeDasharray={`${segment.dash} ${100 - segment.dash}`} strokeDashoffset={segment.offset} />)}</svg><div className="absolute inset-0 flex flex-col items-center justify-center"><span className="text-2xl font-bold">{statusTotal.toLocaleString("id-ID")}</span><span className="text-[10px] text-muted-foreground">Total Arsip</span></div></div></div><div className="mt-5 space-y-3">{statusSegments.map((segment) => <div key={segment.label} className="flex items-center justify-between gap-3 text-xs"><span className="flex items-center gap-2 text-muted-foreground"><i className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: segment.color }} />{segment.label}</span><span className="font-semibold">{segment.value.toLocaleString("id-ID")} <span className="font-normal text-muted-foreground">({statusTotal ? Math.round((segment.value / statusTotal) * 100) : 0}%)</span></span></div>)}</div></div>
 
-      <div className="rounded-2xl border border-border/70 bg-card shadow-xs xl:col-span-2"><div className="flex items-center justify-between border-b px-5 py-4"><h2 className="font-semibold">Aktivitas Terbaru</h2><Link href="/admin/arsip" className="text-xs font-semibold text-primary hover:underline">Lihat semua</Link></div><div className="divide-y">{recentArchives.length ? recentArchives.map((archive) => { const isNew = sameDate(archive.created_at, archive.updated_at); const isFinal = archive.status_arsip === "dihapus"; const Icon = isFinal ? ArchiveRestore : isNew ? FilePlus2 : PencilLine; const label = isFinal ? "Arsip di area akhir retensi" : isNew ? "Arsip baru ditambahkan" : "Arsip diperbarui"; return <Link key={archive.id.toString()} href={`/admin/arsip/${archive.id.toString()}`} className="flex gap-3 px-5 py-4 transition-colors hover:bg-muted/40"><span className={`self-center shrink-0 rounded-xl p-2 ${isFinal ? "bg-rose-50 text-rose-600" : isNew ? "bg-sky-50 text-sky-600" : "bg-violet-50 text-violet-600"}`}><Icon className="h-4 w-4" /></span><span className="min-w-0"><span className="block text-xs font-semibold">{label}</span><span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{archive.nama_arsip}</span><span className="mt-1 block text-[10px] text-muted-foreground">{shortDate.format(archive.updated_at)}</span></span></Link>; }) : <p className="px-5 py-10 text-center text-sm text-muted-foreground">Belum ada aktivitas arsip.</p>}</div></div></section>
+      <div className="rounded-2xl border border-border/70 bg-card shadow-xs xl:col-span-2"><div className="flex items-center justify-between border-b px-5 py-4"><h2 className="font-semibold">Aktivitas Terbaru</h2><Link href="/admin/arsip" className="text-xs font-semibold text-primary hover:underline">Lihat semua</Link></div><div className="divide-y">{recentArchives.length ? recentArchives.map((archive) => { const isNew = sameDate(archive.created_at, archive.updated_at); const isFinal = archive.status_arsip === "akhir_retensi"; const Icon = isFinal ? ArchiveRestore : isNew ? FilePlus2 : PencilLine; const label = isFinal ? "Arsip di area akhir retensi" : isNew ? "Arsip baru ditambahkan" : "Arsip diperbarui"; return <Link key={archive.id.toString()} href={`/admin/arsip/${archive.id.toString()}`} className="flex gap-3 px-5 py-4 transition-colors hover:bg-muted/40"><span className={`self-center shrink-0 rounded-xl p-2 ${isFinal ? "bg-rose-50 text-rose-600" : isNew ? "bg-sky-50 text-sky-600" : "bg-violet-50 text-violet-600"}`}>{Icon ? <Icon className="h-4 w-4" /> : null}</span><span className="min-w-0"><span className="block text-xs font-semibold">{label}</span><span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{archive.nama_arsip}</span><span className="mt-1 block text-[10px] text-muted-foreground">{shortDate.format(archive.updated_at)}</span></span></Link>; }) : <p className="px-5 py-10 text-center text-sm text-muted-foreground">Belum ada aktivitas arsip.</p>}</div></div></section>
 
     <section className="relative overflow-hidden rounded-2xl border border-sky-100 bg-linear-to-r from-sky-50 via-white to-cyan-50 p-5 shadow-xs dark:border-sky-950 dark:from-sky-950/30 dark:via-card dark:to-cyan-950/20"><div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-start gap-4"><div className="rounded-2xl bg-primary p-3 text-primary-foreground shadow-sm"><AlertTriangle className="h-6 w-6" /></div><div><h2 className="font-semibold">Arsip Perlu Ditinjau</h2><p className="mt-1 text-sm text-muted-foreground">Terdapat {currentCounts.review.toLocaleString("id-ID")} arsip yang telah selesai masa retensinya dan memerlukan keputusan akhir.</p></div></div><Link href="/admin/arsip?retensi=perlu_tindakan" className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">Lihat Detail <ArrowRight className="h-4 w-4" /></Link></div></section>
   </div>;

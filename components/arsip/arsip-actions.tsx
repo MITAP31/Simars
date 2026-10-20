@@ -143,8 +143,8 @@ export function ArsipActions({
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
         title="Hapus Arsip"
-        description="Apakah Anda yakin ingin memindahkan arsip ini ke Arsip Akhir Retensi?"
-        confirmLabel="Pindahkan"
+        description="Apakah Anda yakin ingin menghapus arsip ini?"
+        confirmLabel="Hapus"
         action={deleteArsip}
         id={id}
         variant="destructive"

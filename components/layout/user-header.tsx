@@ -8,8 +8,8 @@ import { logoutAction } from "@/actions/auth";
 
 const pageTitles: Record<string, string> = {
   "/user/dashboard": "Dashboard",
-  "/user/pengajuan": "Pengajuan Arsip",
-  "/user/riwayat": "Riwayat Pengajuan",
+  "/user/pengajuan": "Penyerahan Arsip",
+  "/user/riwayat": "Riwayat Penyerahan",
   "/user/profil": "Profil",
 };
 

@@ -10,6 +10,7 @@ import { logoutAction } from "@/actions/auth";
 const pageTitles: Record<string, string> = {
   "/admin/dashboard": "Dashboard",
   "/admin/arsip": "Arsip",
+  "/admin/arsip/akhir-retensi": "Arsip Akhir Retensi",
   "/admin/arsip/tempat-sampah": "Arsip Akhir Retensi",
   "/admin/kategori": "Kategori",
   "/admin/master-data": "Master Data",

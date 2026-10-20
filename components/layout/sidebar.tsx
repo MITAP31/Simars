@@ -19,20 +19,20 @@ import {
   Send,
   Settings,
   Tags,
-  Trash2,
   Users,
   Warehouse,
 } from "lucide-react";
 
 const menuItems = [
   { title: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
+  { title: "Penyerahan Arsip", href: "/admin/penyerahan", icon: Inbox },
   {
     title: "Arsip",
     href: "/admin/arsip",
     icon: Archive,
     children: [
       { title: "Daftar Arsip", href: "/admin/arsip", icon: Archive },
-      { title: "Arsip Akhir Retensi", href: "/admin/arsip/tempat-sampah", icon: ArchiveRestore },
+      { title: "Arsip Akhir Retensi", href: "/admin/arsip/akhir-retensi", icon: ArchiveRestore },
     ],
   },
   { title: "Kategori", href: "/admin/kategori", icon: FolderOpen },
@@ -63,6 +63,11 @@ function categoryIcon(name: string) {
     case "surat masuk": return Inbox;
     default: return FileText;
   }
+}
+
+function submenuItemStyle(index: number, count: number, isOpen: boolean) {
+  const order = isOpen ? index : count - 1 - index;
+  return { transitionDelay: `${order * 70}ms` };
 }
 
 export default function Sidebar({ categories }: { categories: SidebarCategory[] }) {
@@ -144,12 +149,18 @@ export default function Sidebar({ categories }: { categories: SidebarCategory[] 
                     <Icon className={`h-5 w-5 transition-colors ${isActive ? "text-white" : "text-primary group-hover:text-sidebar-accent-foreground"}`} />
                     {item.title}
                   </span>
-                  <ChevronDown className={`h-4 w-4 transition-transform ${showKategoriChildren ? "rotate-180" : ""}`} />
+                  <ChevronDown className={`h-4 w-4 transition-transform duration-300 ease-in-out ${showKategoriChildren ? "rotate-180" : ""}`} />
                 </button>
 
-                {showKategoriChildren && (
-                  <div className="ml-8 mt-1 space-y-1">
-                    {categories.length > 0 ? categories.map((category) => {
+                <div
+                  aria-hidden={!showKategoriChildren}
+                  inert={!showKategoriChildren}
+                  className={`grid overflow-hidden transition-[grid-template-rows,margin] ease-in-out ${showKategoriChildren ? "mt-1" : "mt-0"}`}
+                  style={{ gridTemplateRows: showKategoriChildren ? "1fr" : "0fr", transitionDuration: `${Math.max(450, categories.length * 70 + 300)}ms` }}
+                >
+                  <div className="min-h-0 overflow-hidden">
+                  <div className="ml-8 space-y-1 py-1">
+                    {categories.length > 0 ? categories.map((category, index) => {
                       const CategoryIcon = categoryIcon(category.nama);
                       const categoryPath = `/admin/kategori/${category.slug}`;
                       const isCategoryActive = pathname === categoryPath || pathname.startsWith(`${categoryPath}/`);
@@ -158,7 +169,8 @@ export default function Sidebar({ categories }: { categories: SidebarCategory[] 
                         <Link
                           key={category.slug}
                           href={categoryPath}
-                          className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
+                          style={submenuItemStyle(index, categories.length, showKategoriChildren)}
+                          className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-all duration-300 ease-out ${showKategoriChildren ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0"} ${
                             isCategoryActive ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                           }`}
                         >
@@ -168,7 +180,8 @@ export default function Sidebar({ categories }: { categories: SidebarCategory[] 
                       );
                     }) : <p className="px-3 py-2 text-xs text-muted-foreground">Belum ada kategori aktif.</p>}
                   </div>
-                )}
+                  </div>
+                </div>
               </div>
             );
           }
@@ -185,13 +198,13 @@ export default function Sidebar({ categories }: { categories: SidebarCategory[] 
                   aria-expanded={showMasterDataChildren}
                 >
                   <span className="flex items-center gap-3"><Icon className={`h-5 w-5 transition-colors ${isActive ? "text-white" : "text-primary group-hover:text-sidebar-accent-foreground"}`} />{item.title}</span>
-                  <ChevronDown className={`h-4 w-4 transition-transform ${showMasterDataChildren ? "rotate-180" : ""}`} />
+                  <ChevronDown className={`h-4 w-4 transition-transform duration-300 ease-in-out ${showMasterDataChildren ? "rotate-180" : ""}`} />
                 </button>
-                {showMasterDataChildren && <div className="ml-8 mt-1 space-y-1">{item.children?.map((child) => {
+                <div aria-hidden={!showMasterDataChildren} inert={!showMasterDataChildren} className={`grid overflow-hidden transition-[grid-template-rows,margin] ease-in-out ${showMasterDataChildren ? "mt-1" : "mt-0"}`} style={{ gridTemplateRows: showMasterDataChildren ? "1fr" : "0fr", transitionDuration: `${Math.max(450, (item.children?.length ?? 0) * 70 + 300)}ms` }}><div className="min-h-0 overflow-hidden"><div className="ml-8 space-y-1 py-1">{item.children?.map((child, index) => {
                   const ChildIcon = child.icon;
                   const isChildActive = pathname === child.href || pathname.startsWith(`${child.href}/`);
-                  return <Link key={child.href} href={child.href} className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${isChildActive ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"}`}><ChildIcon className="h-4 w-4 shrink-0" />{child.title}</Link>;
-                })}</div>}
+                  return <Link key={child.href} href={child.href} style={submenuItemStyle(index, item.children?.length ?? 0, showMasterDataChildren)} className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-all duration-300 ease-out ${showMasterDataChildren ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0"} ${isChildActive ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"}`}><ChildIcon className="h-4 w-4 shrink-0" />{child.title}</Link>;
+                })}</div></div></div>
               </div>
             );
           }
@@ -211,15 +224,21 @@ export default function Sidebar({ categories }: { categories: SidebarCategory[] 
                     <Icon className={`h-5 w-5 transition-colors ${isActive ? "text-white" : "text-primary group-hover:text-sidebar-accent-foreground"}`} />
                     {item.title}
                   </span>
-                  <ChevronDown className={`h-4 w-4 transition-transform ${showArsipChildren ? "rotate-180" : ""}`} />
+                  <ChevronDown className={`h-4 w-4 transition-transform duration-300 ease-in-out ${showArsipChildren ? "rotate-180" : ""}`} />
                 </button>
 
-                {showArsipChildren && (
-                  <div className="ml-8 mt-1 space-y-1">
-                    {item.children.map((child) => {
+                <div
+                  aria-hidden={!showArsipChildren}
+                  inert={!showArsipChildren}
+                  className={`grid overflow-hidden transition-[grid-template-rows,margin] ease-in-out ${showArsipChildren ? "mt-1" : "mt-0"}`}
+                  style={{ gridTemplateRows: showArsipChildren ? "1fr" : "0fr", transitionDuration: `${Math.max(450, item.children.length * 70 + 300)}ms` }}
+                >
+                  <div className="min-h-0 overflow-hidden">
+                  <div className="ml-8 space-y-1 py-1">
+                    {item.children.map((child, index) => {
                       const ChildIcon = child.icon;
                       return (
-                        <Link key={child.href} href={child.href} className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
+                        <Link key={child.href} href={child.href} style={submenuItemStyle(index, item.children.length, showArsipChildren)} className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-all duration-300 ease-out ${showArsipChildren ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0"} ${
                           pathname === child.href ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                         }`}>
                           <ChildIcon className="h-4 w-4" />
@@ -228,7 +247,8 @@ export default function Sidebar({ categories }: { categories: SidebarCategory[] 
                       );
                     })}
                   </div>
-                )}
+                  </div>
+                </div>
               </div>
             );
           }

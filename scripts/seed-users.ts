@@ -3,59 +3,111 @@ import bcrypt from "bcryptjs";
 import { PrismaClient } from "../app/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
-const adapter = new PrismaPg({
-  connectionString: process.env.DATABASE_URL,
-});
+class SeedConfigurationError extends Error {}
 
-const prisma = new PrismaClient({ adapter });
+function requiredValue(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new SeedConfigurationError(`Konfigurasi seed wajib diisi: ${name}.`);
+  }
+  return value;
+}
 
-async function main() {
-  console.log("=== SIMARS User Seeding Script ===");
+function seedPassword(name: string, username: string, email: string): string {
+  const password = requiredValue(name);
+  const uniqueCharacters = new Set(password).size;
+  const hasRepeatedPattern = /^(.{1,16})\1+$/.test(password);
+  const resemblesOldDefault = ["admin123", "user123", "nonaktif123"].includes(password.toLowerCase());
+  const accountTerms = [username, email.split("@")[0]]
+    .filter(Boolean)
+    .map((term) => term.toLowerCase());
+  const containsAccountTerm = accountTerms.some((term) => password.toLowerCase().includes(term));
 
-  const adminName = process.env.INITIAL_ADMIN_NAME || "Administrator SIMARS";
-  const adminUsername = process.env.INITIAL_ADMIN_USERNAME || "admin";
-  const adminEmail = process.env.INITIAL_ADMIN_EMAIL || "admin@plnbatam.com";
-  const adminPassword = process.env.INITIAL_ADMIN_PASSWORD || "admin123";
+  if (
+    !/^[a-f0-9]{64}$/.test(password) ||
+    uniqueCharacters < 12 ||
+    hasRepeatedPattern ||
+    resemblesOldDefault ||
+    containsAccountTerm
+  ) {
+    throw new SeedConfigurationError(
+      `Konfigurasi ${name} tidak valid. Gunakan password acak unik 64 karakter hex dari openssl rand -hex 32.`
+    );
+  }
 
-  const userName = process.env.INITIAL_USER_NAME || "Pengguna SIMARS";
-  const userUsername = process.env.INITIAL_USER_USERNAME || "user";
-  const userEmail = process.env.INITIAL_USER_EMAIL || "user@plnbatam.com";
-  const userPassword = process.env.INITIAL_USER_PASSWORD || "user123";
+  return password;
+}
 
-  const inactiveName = process.env.INITIAL_INACTIVE_NAME || "User Nonaktif";
-  const inactiveUsername = process.env.INITIAL_INACTIVE_USERNAME || "user_nonaktif";
-  const inactiveEmail = process.env.INITIAL_INACTIVE_EMAIL || "nonaktif@plnbatam.com";
-  const inactivePassword = process.env.INITIAL_INACTIVE_PASSWORD || "nonaktif123";
-
-  const usersToSeed = [
+function loadSeedUsers() {
+  const users = [
     {
-      nama: adminName,
-      username: adminUsername,
-      email: adminEmail,
-      rawPassword: adminPassword,
+      nama: requiredValue("INITIAL_ADMIN_NAME"),
+      username: requiredValue("INITIAL_ADMIN_USERNAME"),
+      email: requiredValue("INITIAL_ADMIN_EMAIL"),
       role: "admin",
       aktif: true,
       label: "Admin Account",
+      passwordEnv: "INITIAL_ADMIN_PASSWORD",
     },
     {
-      nama: userName,
-      username: userUsername,
-      email: userEmail,
-      rawPassword: userPassword,
+      nama: requiredValue("INITIAL_USER_NAME"),
+      username: requiredValue("INITIAL_USER_USERNAME"),
+      email: requiredValue("INITIAL_USER_EMAIL"),
       role: "user",
       aktif: true,
       label: "Standard User Account",
+      passwordEnv: "INITIAL_USER_PASSWORD",
     },
     {
-      nama: inactiveName,
-      username: inactiveUsername,
-      email: inactiveEmail,
-      rawPassword: inactivePassword,
+      nama: requiredValue("INITIAL_INACTIVE_NAME"),
+      username: requiredValue("INITIAL_INACTIVE_USERNAME"),
+      email: requiredValue("INITIAL_INACTIVE_EMAIL"),
       role: "user",
       aktif: false,
       label: "Inactive User Account (For Access Testing)",
+      passwordEnv: "INITIAL_INACTIVE_PASSWORD",
     },
   ];
+
+  for (const item of users) {
+    if (item.nama.length > 255 || !/^[A-Za-z0-9._-]{3,100}$/.test(item.username)) {
+      throw new SeedConfigurationError(
+        `Konfigurasi nama atau username tidak valid untuk ${item.passwordEnv.replace("_PASSWORD", "_NAME/USERNAME")}.`
+      );
+    }
+    if (
+      item.email.length > 255 ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item.email)
+    ) {
+      throw new SeedConfigurationError(
+        `Konfigurasi email tidak valid untuk ${item.passwordEnv.replace("_PASSWORD", "_EMAIL")}.`
+      );
+    }
+  }
+
+  const usernames = users.map((user) => user.username.toLowerCase());
+  const emails = users.map((user) => user.email.toLowerCase());
+  if (new Set(usernames).size !== users.length || new Set(emails).size !== users.length) {
+    throw new SeedConfigurationError("Username dan email untuk setiap akun seed harus unik.");
+  }
+
+  const passwords = users.map((user) => seedPassword(user.passwordEnv, user.username, user.email));
+  if (new Set(passwords).size !== passwords.length) {
+    throw new SeedConfigurationError("Password untuk setiap akun seed harus berbeda.");
+  }
+
+  return users.map((user, index) => ({ ...user, rawPassword: passwords[index] }));
+}
+
+async function main() {
+  const usersToSeed = loadSeedUsers();
+  const databaseUrl = requiredValue("DATABASE_URL");
+  const prisma = new PrismaClient({
+    adapter: new PrismaPg({ connectionString: databaseUrl }),
+  });
+
+  try {
+  console.log("=== SIMARS User Seeding Script ===");
 
   for (const item of usersToSeed) {
     const existing = await prisma.user.findFirst({
@@ -89,13 +141,18 @@ async function main() {
   }
 
   console.log("=== Seeding Selesai ===");
+  } finally {
+    await prisma.$disconnect();
+  }
 }
 
 main()
-  .catch((err) => {
-    console.error("Seeding gagal:", err);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
+  .catch((error: unknown) => {
+    if (error instanceof SeedConfigurationError) {
+      console.error(error.message);
+    } else {
+      // Prisma/database errors may contain connection details; never print them.
+      console.error("Seeding gagal saat mengakses database. Detail internal disembunyikan.");
+    }
+    process.exitCode = 1;
   });

@@ -12,7 +12,7 @@ export interface JadwalRetensiInput {
   aktif?: boolean | null;
 }
 
-export type StatusRetensi = "AKTIF" | "INAKTIF" | "SELESAI_RETENSI" | "MENUNGGU_KONFIRMASI";
+export type StatusRetensi = "AKTIF" | "INAKTIF" | "SELESAI";
 
 export interface RetentionCalculationResult {
   tanggal_dasar_retensi: Date | null;
@@ -89,7 +89,7 @@ export function normalizeDateToUTC(date: Date): Date {
 /**
  * Engine perhitungan retensi arsip.
  * Mengembalikan tanggal dasar, tanggal mulai/selesai aktif, tanggal selesai inaktif,
- * serta status retensi berdasarkan tanggal evaluasi (default: tanggal saat ini).
+ * serta status retensi (AKTIF | INAKTIF | SELESAI) berdasarkan tanggal evaluasi.
  */
 export function calculateRetention({
   tanggalArsip,
@@ -108,7 +108,7 @@ export function calculateRetention({
 
   // 1. Tentukan tanggal dasar retensi:
   // - Prioritaskan tanggalDasarKhusus jika diberikan oleh admin/sistem
-  // - Jika tidak ada / dasar_perhitungan berupa teks bebas atau kosong: fallback ke tanggalArsip
+  // - Jika tidak ada: fallback ke tanggalArsip
   const baseDate = tanggalDasarKhusus
     ? normalizeDateToUTC(tanggalDasarKhusus)
     : tanggalArsip
@@ -136,7 +136,7 @@ export function calculateRetention({
     jadwalRetensi.satuan_retensi_inaktif
   );
 
-  // 5. Tentukan status retensi saat ini
+  // 5. Tentukan status retensi saat ini (hanya AKTIF | INAKTIF | SELESAI)
   const evalDate = normalizeDateToUTC(currentDate);
 
   let statusRetensi: StatusRetensi = "AKTIF";
@@ -151,22 +151,9 @@ export function calculateRetention({
     labelStatus = "Retensi Inaktif";
   } else {
     // Masa aktif dan masa inaktif telah berakhir
-    statusRetensi = "SELESAI_RETENSI";
+    statusRetensi = "SELESAI";
+    labelStatus = "Selesai Retensi";
     isCompleted = true;
-
-    switch (jadwalRetensi.keterangan_akhir) {
-      case "PERMANEN":
-        labelStatus = "Selesai Retensi (Disimpan Permanen)";
-        break;
-      case "MUSNAH":
-        labelStatus = "Selesai Retensi (Siap Dimusnahkan)";
-        break;
-      case "MUSNAH_DENGAN_KETERANGAN_KHUSUS":
-        labelStatus = "Selesai Retensi (Perlu Peninjauan)";
-        break;
-      default:
-        labelStatus = "Selesai Retensi";
-    }
   }
 
   return {
@@ -182,47 +169,73 @@ export function calculateRetention({
 }
 
 /**
- * Memeriksa apakah suatu arsip membutuhkan peninjauan / tindakan manual retensi:
- * Yaitu HANYA ketika masa retensi telah selesai (SELESAI_RETENSI) dan nasib akhirnya
- * adalah "Perlu Peninjauan" (MUSNAH_DENGAN_KETERANGAN_KHUSUS).
- * Arsip dengan nasib akhir Disimpan Permanen atau Dimusnahkan tidak memerlukan dialog Tinjau Retensi.
+ * Memeriksa apakah arsip memerlukan peninjauan oleh admin:
+ * Yaitu ketika status_retensi = SELESAI, hasil akhir = MUSNAH_DENGAN_KETERANGAN_KHUSUS,
+ * dan belum pernah diambil keputusan SIMPAN / MUSNAH oleh admin.
  */
-export function needsRetentionReview(
-  retention: RetentionCalculationResult | null | undefined
-): boolean {
-  if (!retention || retention.status_retensi !== "SELESAI_RETENSI") {
-    return false;
-  }
-  return retention.keterangan_akhir === "MUSNAH_DENGAN_KETERANGAN_KHUSUS";
-}
-
-/** Keputusan eksplisit admin untuk arsip yang sebelumnya memerlukan peninjauan. */
-export const RETENTION_DECISION_PERMANEN = "SELESAI_RETENSI_PERMANEN";
-
-export function hasPermanentRetentionDecision(statusRetensi: string | null | undefined) {
-  return statusRetensi === RETENTION_DECISION_PERMANEN;
-}
-
-/** Menggabungkan hasil engine dengan keputusan per arsip yang tersimpan. */
 export function needsArchiveRetentionReview(
   retention: RetentionCalculationResult | null | undefined,
-  statusRetensi: string | null | undefined,
-) {
-  return !hasPermanentRetentionDecision(statusRetensi) && needsRetentionReview(retention);
+  keputusanRetensi?: string | null | undefined,
+  statusRetensi?: string | null | undefined
+): boolean {
+  if (!retention) return false;
+  const isSelesai = retention.status_retensi === "SELESAI" || (retention.status_retensi as string) === "SELESAI_RETENSI";
+  if (!isSelesai) return false;
+
+  if (retention.keterangan_akhir !== "MUSNAH_DENGAN_KETERANGAN_KHUSUS") {
+    return false;
+  }
+
+  // Jika sudah ada keputusan eksplisit SIMPAN atau MUSNAH
+  if (keputusanRetensi === "SIMPAN" || keputusanRetensi === "MUSNAH") {
+    return false;
+  }
+
+  // Dukungan backward-compatibility jika ada data legacy
+  if (statusRetensi === "SELESAI_RETENSI_PERMANEN" || statusRetensi === "SELESAI_RETENSI_DIMUSNAHKAN") {
+    return false;
+  }
+
+  return true;
 }
 
 /**
- * Memeriksa apakah suatu arsip masuk kategori "Arsip Akhir Retensi":
- * Yaitu ketika masa retensi telah selesai (SELESAI_RETENSI) dan nasib akhirnya
- * adalah "Dimusnahkan" (MUSNAH) tanpa klausul/pengecualian khusus.
+ * Memeriksa apakah arsip masuk ke area "Arsip Akhir Retensi":
+ * 1. Jika status_arsip = "akhir_retensi", ATAU
+ * 2. Jika status_retensi = SELESAI dan:
+ *    - keterangan_akhir = "MUSNAH", ATAU
+ *    - keterangan_akhir = "MUSNAH_DENGAN_KETERANGAN_KHUSUS" dengan keputusanRetensi = "MUSNAH"
+ * (Kecuali jika arsip berstatus dihapus / status_arsip = "dihapus")
  */
 export function isArchivedRetentionEnd(
-  retention: RetentionCalculationResult | null | undefined
+  retention: RetentionCalculationResult | null | undefined,
+  keputusanRetensi?: string | null | undefined,
+  statusArsip?: string | null | undefined
 ): boolean {
-  if (!retention || retention.status_retensi !== "SELESAI_RETENSI") {
+  if (statusArsip === "dihapus") {
     return false;
   }
-  return retention.keterangan_akhir === "MUSNAH";
+  if (statusArsip === "akhir_retensi") {
+    return true;
+  }
+  if (!retention) {
+    return false;
+  }
+
+  const isSelesai = retention.status_retensi === "SELESAI" || (retention.status_retensi as string) === "SELESAI_RETENSI";
+  if (!isSelesai) {
+    return false;
+  }
+
+  if (retention.keterangan_akhir === "MUSNAH") {
+    return true;
+  }
+
+  if (retention.keterangan_akhir === "MUSNAH_DENGAN_KETERANGAN_KHUSUS" && keputusanRetensi === "MUSNAH") {
+    return true;
+  }
+
+  return false;
 }
 
 export type RetentionNotificationItem = {
@@ -232,5 +245,5 @@ export type RetentionNotificationItem = {
   kode_klasifikasi: string;
   keterangan_akhir: string;
   tanggal_selesai_inaktif: Date | null;
-  needs_action: boolean; // true if MUSNAH_DENGAN_KETERANGAN_KHUSUS
+  needs_action: boolean;
 };

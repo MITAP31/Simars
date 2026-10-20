@@ -16,6 +16,14 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Demo environment
+
+Configure `DATABASE_URL` to point to a dedicated demo PostgreSQL database, separate from local development. Set `AUTH_SECRET` to a unique random value containing at least 32 bytes; generate one with `openssl rand -hex 32`. The application rejects missing or undersized secrets and does not use a built-in fallback. Do not commit the generated value.
+
+If using `npm run seed:users`, set all `INITIAL_ADMIN_*`, `INITIAL_USER_*`, and `INITIAL_INACTIVE_*` values in `.env`. Names, usernames, and email addresses must be valid and unique; each password must be a distinct 64-character hex value generated with `openssl rand -hex 32`. The seed script rejects missing/default credentials and does not print passwords or database connection details.
+
+The build checks that `public/uploads/arsip` and `storage/uploads/arsip` contain no files, and Next.js output tracing excludes both upload directories. Archive files and generated Berita Acara PDFs remain on local disk at runtime; persistent private hosting storage must be configured separately before deployment. Run hosting builds from a clean source checkout without uploaded files.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

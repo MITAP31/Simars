@@ -1,10 +1,24 @@
-import { AlertTriangle, Archive, ArchiveRestore, FileCheck2, FileClock, FileText, Plus } from "lucide-react";
+import {
+  AlertTriangle,
+  Archive,
+  ArchiveRestore,
+  ArrowRight,
+  FileCheck2,
+  FileClock,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import Link from "next/link";
 
 import { ArsipActions } from "@/components/arsip/arsip-actions";
-import { ArsipSearch } from "@/components/arsip/arsip-search";
+import { ArsipFilterBar } from "@/components/arsip/arsip-filter-bar";
+import { ArsipPagination } from "@/components/arsip/arsip-pagination";
 import { prisma } from "@/lib/prisma";
-import { calculateRetention, isArchivedRetentionEnd, needsArchiveRetentionReview } from "@/lib/retensi";
+import {
+  calculateRetention,
+  isArchivedRetentionEnd,
+  needsArchiveRetentionReview,
+} from "@/lib/retensi";
 
 export const dynamic = "force-dynamic";
 
@@ -22,149 +36,259 @@ function formatArchiveDate(date: Date | null) {
 export default async function ArsipPage({
   searchParams,
 }: {
-  searchParams: Promise<{ jenis?: string; q?: string; retensi?: string }>;
+  searchParams: Promise<{
+    tab?: string;
+    q?: string;
+    kategori?: string;
+    jenis?: string;
+    divisi?: string;
+    status?: string;
+    retensi?: string;
+    page?: string;
+  }>;
 }) {
-  const { jenis, q, retensi } = await searchParams;
-  const query = typeof q === "string" ? q.trim() : "";
-  const jenisArsipId = jenis && /^\d+$/.test(jenis) ? BigInt(jenis) : null;
-  const filterRetensi = typeof retensi === "string" ? retensi.trim() : "";
+  const params = await searchParams;
+  const tabParam = params.tab === "permanen" ? "permanen" : "aktif";
+  const query = typeof params.q === "string" ? params.q.trim() : "";
 
-  const [archives, jenisArsip, totalAkhirRetensi] = await Promise.all([
-    prisma.arsip.findMany({
-      where: {
-        status_arsip: "tersimpan",
-        ...(jenisArsipId ? { jenis_arsip_id: jenisArsipId } : {}),
-        ...(query
-          ? {
-              OR: [
-                { nomor_arsip: { contains: query, mode: "insensitive" } },
-                { nama_arsip: { contains: query, mode: "insensitive" } },
-                { penulis_pengirim: { contains: query, mode: "insensitive" } },
-                {
-                  kode_klasifikasi: {
-                    is: {
-                      OR: [
-                        { kode: { contains: query, mode: "insensitive" } },
-                        { nama: { contains: query, mode: "insensitive" } },
-                      ],
+  const categoryParam = params.kategori || params.jenis;
+  const kategoriId =
+    categoryParam && /^\d+$/.test(categoryParam) ? BigInt(categoryParam) : null;
+
+  const divisiParam = params.divisi;
+  const divisiId =
+    divisiParam && /^\d+$/.test(divisiParam) ? BigInt(divisiParam) : null;
+
+  const statusParam = typeof params.status === "string"
+    ? params.status.trim()
+    : typeof params.retensi === "string"
+    ? params.retensi.trim()
+    : "";
+
+  const currentPage =
+    typeof params.page === "string" && /^\d+$/.test(params.page)
+      ? Math.max(1, parseInt(params.page, 10))
+      : 1;
+
+  const [archives, jenisArsip, divisions, totalAkhirRetensi] =
+    await Promise.all([
+      prisma.arsip.findMany({
+        where: {
+          status_arsip: "tersimpan",
+          ...(kategoriId ? { jenis_arsip_id: kategoriId } : {}),
+          ...(divisiId ? { divisi_id: divisiId } : {}),
+          ...(query
+            ? {
+                OR: [
+                  { nomor_arsip: { contains: query, mode: "insensitive" } },
+                  { nama_arsip: { contains: query, mode: "insensitive" } },
+                  { penulis_pengirim: { contains: query, mode: "insensitive" } },
+                  {
+                    kode_klasifikasi: {
+                      is: {
+                        OR: [
+                          { kode: { contains: query, mode: "insensitive" } },
+                          { nama: { contains: query, mode: "insensitive" } },
+                        ],
+                      },
                     },
                   },
-                },
-                {
-                  divisi: {
-                    is: {
-                      OR: [
-                        { kode: { contains: query, mode: "insensitive" } },
-                        { nama: { contains: query, mode: "insensitive" } },
-                      ],
+                  {
+                    divisi: {
+                      is: {
+                        OR: [
+                          { kode: { contains: query, mode: "insensitive" } },
+                          { nama: { contains: query, mode: "insensitive" } },
+                        ],
+                      },
                     },
                   },
-                },
-              ],
-            }
-          : {}),
-      },
-      include: {
-        kode_klasifikasi: {
-          select: {
-            id: true,
-            kode: true,
-            nama: true,
-            jadwal_retensi: true,
-          },
+                ],
+              }
+            : {}),
         },
-        divisi: { select: { kode: true, nama: true } },
-        lokasi_penyimpanan: { select: { kode: true, nama: true } },
-        jenis_arsip: { select: { nama: true } },
-      },
-      orderBy: { created_at: "desc" },
-    }),
-    prisma.jenis_arsip.findMany({
-      where: { aktif: true },
-      select: { id: true, nama: true },
-      orderBy: { nama: "asc" },
-    }),
-    prisma.arsip.count({ where: { status_arsip: "dihapus" } }),
-  ]);
+        include: {
+          kode_klasifikasi: {
+            select: {
+              id: true,
+              kode: true,
+              nama: true,
+              jadwal_retensi: true,
+            },
+          },
+          divisi: { select: { id: true, kode: true, nama: true } },
+          lokasi_penyimpanan: { select: { kode: true, nama: true } },
+          jenis_arsip: { select: { id: true, nama: true } },
+        },
+        orderBy: { created_at: "desc" },
+      }),
+      prisma.jenis_arsip.findMany({
+        where: { aktif: true },
+        select: { id: true, nama: true },
+        orderBy: { nama: "asc" },
+      }),
+      prisma.divisi.findMany({
+        where: { aktif: true },
+        select: { id: true, kode: true, nama: true },
+        orderBy: { kode: "asc" },
+      }),
+      prisma.arsip.count({ where: { status_arsip: "akhir_retensi" } }),
+    ]);
 
-  // Evaluasi retensi dinamis:
-  // 1. Arsip yang sudah selesai retensi dengan nasib "Dimusnahkan" dipindahkan ke "Arsip Akhir Retensi"
-  //    sehingga TIDAK BOLEH muncul lagi di daftar Arsip normal.
-  // 2. Arsip normal, aktif, inaktif, "Perlu Peninjauan", dan "Disimpan Permanen" tetap muncul di daftar ini.
-  // 3. Filter retensi opsional jika diakses dari notifikasi atau filter menu
+  // Evaluasi retensi dinamis untuk seluruh arsip tersimpan
   const currentDate = new Date();
-  const filteredArchives = archives.filter((archive) => {
-    const schedule = archive.kode_klasifikasi.jadwal_retensi;
-    const calc = schedule && schedule.aktif
-      ? calculateRetention({
-          tanggalArsip: archive.tanggal_arsip,
-          tanggalDasarKhusus: archive.tanggal_dasar_retensi,
-          jadwalRetensi: schedule,
-          currentDate,
-        })
-      : null;
-
-    // Kecualikan arsip yang sudah masuk kondisi Akhir Retensi (SELESAI_RETENSI + Dimusnahkan)
-    if (isArchivedRetentionEnd(calc)) {
-      return false;
-    }
-
-    if (!filterRetensi) return true;
-
-    if (filterRetensi === "perlu_tindakan") {
-      return needsArchiveRetentionReview(calc, archive.status_retensi);
-    }
-    if (filterRetensi === "aktif") {
-      return calc?.status_retensi === "AKTIF";
-    }
-    if (filterRetensi === "inaktif") {
-      return calc?.status_retensi === "INAKTIF";
-    }
-    if (filterRetensi === "permanen") {
-      return calc?.status_retensi === "SELESAI_RETENSI" && calc.keterangan_akhir === "PERMANEN";
-    }
-    return true;
-  });
-
-  // Hitung summary metrics dari seluruh arsip tersimpan
+  let countTotalNormal = 0;
   let countAktif = 0;
   let countInaktif = 0;
   let countPerluDitinjau = 0;
-  let countTotalNormal = 0;
+  let countPermanen = 0;
+  let countDynamicAkhirRetensi = 0;
 
   for (const archive of archives) {
     const schedule = archive.kode_klasifikasi.jadwal_retensi;
-    const calc = schedule && schedule.aktif
-      ? calculateRetention({
-          tanggalArsip: archive.tanggal_arsip,
-          tanggalDasarKhusus: archive.tanggal_dasar_retensi,
-          jadwalRetensi: schedule,
-          currentDate,
-        })
-      : null;
+    const calc =
+      schedule && schedule.aktif
+        ? calculateRetention({
+            tanggalArsip: archive.tanggal_arsip,
+            tanggalDasarKhusus: archive.tanggal_dasar_retensi,
+            jadwalRetensi: schedule,
+            currentDate,
+          })
+        : null;
 
-    if (isArchivedRetentionEnd(calc)) {
+    if (isArchivedRetentionEnd(calc, archive.keputusan_retensi, archive.status_arsip)) {
+      countDynamicAkhirRetensi++;
       continue;
     }
 
     countTotalNormal++;
-    if (needsArchiveRetentionReview(calc, archive.status_retensi)) {
+
+    const isSelesai =
+      calc?.status_retensi === "SELESAI" ||
+      (calc?.status_retensi as string) === "SELESAI_RETENSI";
+    const isPermanen =
+      (isSelesai &&
+        (calc?.keterangan_akhir === "PERMANEN" ||
+          archive.keputusan_retensi === "SIMPAN")) ||
+      schedule?.keterangan_akhir === "PERMANEN" ||
+      archive.keputusan_retensi === "SIMPAN";
+
+    if (isPermanen) {
+      countPermanen++;
+    }
+
+    if (
+      needsArchiveRetentionReview(
+        calc,
+        archive.keputusan_retensi,
+        archive.status_retensi
+      )
+    ) {
       countPerluDitinjau++;
-    } else if (calc?.status_retensi === "INAKTIF" || (!calc && archive.status_retensi === "INAKTIF")) {
+    } else if (
+      calc?.status_retensi === "INAKTIF" ||
+      (!calc && archive.status_retensi === "INAKTIF")
+    ) {
       countInaktif++;
     } else {
       countAktif++;
     }
   }
 
+  // Filter arsip untuk tabel sesuai Tab dan Filter Status yang dipilih
+  const filteredArchives = archives.filter((archive) => {
+    const schedule = archive.kode_klasifikasi.jadwal_retensi;
+    const calc =
+      schedule && schedule.aktif
+        ? calculateRetention({
+            tanggalArsip: archive.tanggal_arsip,
+            tanggalDasarKhusus: archive.tanggal_dasar_retensi,
+            jadwalRetensi: schedule,
+            currentDate,
+          })
+        : null;
+
+    // 1. Kecualikan arsip yang sudah masuk kondisi Akhir Retensi (dimusnahkan)
+    if (isArchivedRetentionEnd(calc, archive.keputusan_retensi, archive.status_arsip)) {
+      return false;
+    }
+
+    const isSelesai =
+      calc?.status_retensi === "SELESAI" ||
+      (calc?.status_retensi as string) === "SELESAI_RETENSI";
+
+    const isPermanen =
+      (isSelesai &&
+        (calc?.keterangan_akhir === "PERMANEN" ||
+          archive.keputusan_retensi === "SIMPAN")) ||
+      schedule?.keterangan_akhir === "PERMANEN" ||
+      archive.keputusan_retensi === "SIMPAN";
+
+    const isNeedsReview = needsArchiveRetentionReview(
+      calc,
+      archive.keputusan_retensi,
+      archive.status_retensi
+    );
+
+    const isInaktif =
+      calc?.status_retensi === "INAKTIF" ||
+      (!calc && archive.status_retensi === "INAKTIF");
+
+    // 2. Jika di Tab Arsip Permanen: tampilkan arsip yang hasil akhirnya PERMANEN
+    if (tabParam === "permanen") {
+      return isPermanen;
+    }
+
+    // 3. Jika di Tab Utama (tabParam === "aktif"):
+    // Case A: Card "Perlu Ditinjau" dipilih
+    if (statusParam === "perlu_tindakan") {
+      return isNeedsReview;
+    }
+
+    // Case B: Card "Arsip Inaktif" dipilih
+    if (statusParam === "inaktif") {
+      return isInaktif && !isNeedsReview;
+    }
+
+    // Case C: Card "Arsip Aktif" dipilih
+    if (statusParam === "aktif") {
+      // HANYA arsip yang status retensinya aktif & masih berada dalam masa aktif.
+      // Arsip inaktif, menunggu konfirmasi, PERMANEN, atau akhir retensi TIDAK BOLEH muncul.
+      return !isInaktif && !isNeedsReview && !isPermanen;
+    }
+
+    // Case D: Card "Total Arsip" (default / statusParam === "semua" / statusParam === "total")
+    // Tampilkan seluruh arsip operasional yang tersimpan dalam sistem.
+    return true;
+  });
+
+  // Hitung pagination (10 item per halaman)
+  const itemsPerPage = 10;
+  const totalPages = Math.max(1, Math.ceil(filteredArchives.length / itemsPerPage));
+  const validPage = Math.min(currentPage, totalPages);
+  const paginatedArchives = filteredArchives.slice(
+    (validPage - 1) * itemsPerPage,
+    validPage * itemsPerPage
+  );
+
+  // Penentuan active state HANYA untuk satu card yang sedang dipilih:
+  const isTotalActive =
+    tabParam !== "permanen" &&
+    (!statusParam || statusParam === "semua" || statusParam === "total");
+  const isAktifActive = tabParam !== "permanen" && statusParam === "aktif";
+  const isInaktifActive = tabParam !== "permanen" && statusParam === "inaktif";
+  const isPerluDitinjauActive =
+    tabParam !== "permanen" && statusParam === "perlu_tindakan";
+
+  // Summary Cards data
   const statCards = [
     {
       title: "Total Arsip",
       value: countTotalNormal,
-      description: "Arsip operasional",
+      description: "Seluruh koleksi arsip",
       icon: Archive,
-      href: "/admin/arsip",
-      active: !filterRetensi,
+      href: "/admin/arsip?status=semua",
+      active: isTotalActive,
       color: "text-blue-600 bg-blue-50 dark:bg-blue-950/50 dark:text-blue-400",
     },
     {
@@ -172,8 +296,8 @@ export default async function ArsipPage({
       value: countAktif,
       description: "Dalam masa aktif",
       icon: FileCheck2,
-      href: "/admin/arsip?retensi=aktif",
-      active: filterRetensi === "aktif",
+      href: "/admin/arsip?status=aktif",
+      active: isAktifActive,
       color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 dark:text-emerald-400",
     },
     {
@@ -181,8 +305,8 @@ export default async function ArsipPage({
       value: countInaktif,
       description: "Dalam masa inaktif",
       icon: FileClock,
-      href: "/admin/arsip?retensi=inaktif",
-      active: filterRetensi === "inaktif",
+      href: "/admin/arsip?status=inaktif",
+      active: isInaktifActive,
       color: "text-sky-600 bg-sky-50 dark:bg-sky-950/50 dark:text-sky-400",
     },
     {
@@ -190,56 +314,84 @@ export default async function ArsipPage({
       value: countPerluDitinjau,
       description: "Perlu aksi/peninjauan",
       icon: AlertTriangle,
-      href: "/admin/arsip?retensi=perlu_tindakan",
-      active: filterRetensi === "perlu_tindakan",
+      href: "/admin/arsip?status=perlu_tindakan",
+      active: isPerluDitinjauActive,
       color: "text-amber-600 bg-amber-50 dark:bg-amber-950/50 dark:text-amber-400",
       highlight: countPerluDitinjau > 0,
     },
     {
       title: "Akhir Retensi",
-      value: totalAkhirRetensi,
-      description: "Arsip di penampungan",
+      value: totalAkhirRetensi + countDynamicAkhirRetensi,
+      description: "Menunggu pemusnahan fisik",
       icon: ArchiveRestore,
-      href: "/admin/arsip/tempat-sampah",
+      href: "/admin/arsip/akhir-retensi",
       active: false,
       color: "text-rose-600 bg-rose-50 dark:bg-rose-950/50 dark:text-rose-400",
     },
   ];
 
+  // Helper URL untuk berpindah tab dengan mempertahankan query & filter
+  const buildTabUrl = (targetTab: "aktif" | "permanen") => {
+    const p = new URLSearchParams();
+    if (targetTab === "permanen") {
+      p.set("tab", "permanen");
+    } else {
+      if (statusParam && statusParam !== "semua") {
+        p.set("status", statusParam);
+      }
+    }
+    if (query) p.set("q", query);
+    if (kategoriId) p.set("kategori", kategoriId.toString());
+    if (divisiId) p.set("divisi", divisiId.toString());
+    return p.toString() ? `/admin/arsip?${p.toString()}` : "/admin/arsip";
+  };
+
   return (
     <div className="space-y-6 p-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Arsip</h1>
-          <p className="text-muted-foreground">Kelola seluruh dokumen dan arsip PLN Batam.</p>
+      {/* 1. Header Halaman */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+          <Link href="/admin" className="hover:text-foreground transition-colors">
+            Admin
+          </Link>
+          <span>/</span>
+          <span className="text-foreground">Arsip</span>
         </div>
-        <Link
-          href="/admin/arsip/tambah"
-          className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 shadow-sm transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          Tambah Arsip
-        </Link>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Arsip</h1>
+            <p className="text-sm text-muted-foreground">
+              Kelola seluruh dokumen dan arsip PLN Batam.
+            </p>
+          </div>
+          <Link
+            href="/admin/arsip/tambah"
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 shadow-xs transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Tambah Arsip
+          </Link>
+        </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      {/* 2. 5 Summary Cards */}
+      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-5">
         {statCards.map((item) => {
           const Icon = item.icon;
           return (
             <Link
               key={item.title}
               href={item.href}
-              className={`group block rounded-xl border p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md ${
+              className={`group block rounded-xl border p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-sm ${
                 item.active
-                  ? "border-primary bg-primary/5 ring-1 ring-primary"
+                  ? "border-primary/60 bg-primary/[0.03] ring-1 ring-primary/40"
                   : item.highlight
-                  ? "border-amber-300 bg-amber-50/40 dark:border-amber-800/50"
-                  : "border-border/70 bg-card"
+                  ? "border-amber-300/80 bg-amber-50/30 dark:border-amber-800/40"
+                  : "border-border/60 bg-card hover:border-border"
               }`}
             >
               <div className="flex items-start justify-between">
-                <div className={`rounded-lg p-2 ${item.color}`}>
+                <div className={`rounded-lg p-2.5 ${item.color}`}>
                   <Icon className="h-4 w-4" />
                 </div>
                 {item.highlight && (
@@ -248,147 +400,215 @@ export default async function ArsipPage({
                   </span>
                 )}
               </div>
-              <p className="mt-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{item.title}</p>
-              <p className="mt-0.5 text-2xl font-bold tracking-tight text-foreground">{item.value.toLocaleString("id-ID")}</p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">{item.description}</p>
+              <p className="mt-3 text-xs font-medium text-muted-foreground">
+                {item.title}
+              </p>
+              <p className="mt-0.5 text-2xl font-bold tracking-tight text-foreground">
+                {item.value.toLocaleString("id-ID")}
+              </p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                {item.description}
+              </p>
             </Link>
           );
         })}
       </div>
 
-      {/* Komponen Pencarian Arsip */}
-      <div className="flex items-center gap-3">
-        <ArsipSearch />
-      </div>
-
-      {/* Filter Jenis/Kategori Arsip */}
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        <Link
-          href={query ? `/admin/arsip?q=${encodeURIComponent(query)}` : "/admin/arsip"}
-          className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-            !jenisArsipId ? "bg-primary text-primary-foreground shadow-xs" : "border hover:bg-muted"
-          }`}
-        >
-          Semua
-        </Link>
-        {jenisArsip.map((type) => {
-          const typeId = type.id.toString();
-          const isSelected = jenisArsipId === type.id;
-          const href = query
-            ? `/admin/arsip?jenis=${typeId}&q=${encodeURIComponent(query)}`
-            : `/admin/arsip?jenis=${typeId}`;
-
-          return (
-            <Link
-              key={typeId}
-              href={href}
-              className={`whitespace-nowrap rounded-md px-4 py-2 text-sm transition-colors ${
-                isSelected ? "bg-primary font-medium text-primary-foreground shadow-xs" : "border hover:bg-muted"
+      {/* 3, 4, 5, 6. Container Utama: Tab + Search/Filter + Tabel + Pagination */}
+      <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-xs">
+        {/* Tab Daftar Arsip: [ Arsip Aktif ] [ Arsip Permanen ] */}
+        <div className="flex items-center gap-6 border-b border-border/60 px-5 pt-3">
+          <Link
+            href={buildTabUrl("aktif")}
+            className={`relative pb-3 text-sm transition-colors ${
+              tabParam === "aktif"
+                ? "font-semibold text-primary border-b-2 border-primary -mb-px"
+                : "font-medium text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Arsip Aktif
+            <span
+              className={`ml-2 rounded-full px-2 py-0.5 text-xs font-medium ${
+                tabParam === "aktif"
+                  ? "bg-primary/10 text-primary"
+                  : "bg-muted text-muted-foreground"
               }`}
             >
-              {type.nama}
-            </Link>
-          );
-        })}
-      </div>
+              {countAktif.toLocaleString("id-ID")}
+            </span>
+          </Link>
 
-      {/* Tabel Data Arsip */}
-      <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+          <Link
+            href={buildTabUrl("permanen")}
+            className={`relative pb-3 text-sm transition-colors ${
+              tabParam === "permanen"
+                ? "font-semibold text-primary border-b-2 border-primary -mb-px"
+                : "font-medium text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Arsip Permanen
+            <span
+              className={`ml-2 rounded-full px-2 py-0.5 text-xs font-medium ${
+                tabParam === "permanen"
+                  ? "bg-primary/10 text-primary"
+                  : "bg-muted text-muted-foreground"
+              }`}
+            >
+              {countPermanen.toLocaleString("id-ID")}
+            </span>
+          </Link>
+        </div>
+
+        {/* Search & Filter Bar: [ 🔍 Search ] [Kategori] [Divisi] [Status] [Reset] */}
+        <ArsipFilterBar
+          categories={jenisArsip.map((j) => ({
+            id: j.id.toString(),
+            nama: j.nama,
+          }))}
+          divisions={divisions.map((d) => ({
+            id: d.id.toString(),
+            kode: d.kode,
+            nama: d.nama,
+          }))}
+          activeTab={tabParam}
+          initialSearch={query}
+          initialKategori={kategoriId ? kategoriId.toString() : ""}
+          initialDivisi={divisiId ? divisiId.toString() : ""}
+          initialStatus={statusParam}
+        />
+
+        {/* Tabel Arsip Clean: No, Nomor Arsip, Kode Klasifikasi, Nama Arsip, Jenis Arsip, Divisi, Tanggal Arsip, Status, Aksi */}
         <div className="overflow-x-auto">
-          <table className="min-w-[1550px] w-full text-sm">
+          <table className="w-full text-sm">
             <thead>
-              <tr className="border-b bg-muted/50 text-left">
-                <Head>No</Head>
-                <Head>Kode Klasifikasi</Head>
-                <Head>Divisi</Head>
-                <Head>Judul Arsip / Perihal</Head>
-                <Head>Jumlah Arsip (Lembar)</Head>
-                <Head>Jenis Arsip</Head>
-                <Head>Penulis / Pengirim</Head>
-                <Head>Tahun</Head>
-                <Head>Tanggal Dokumen</Head>
-                <Head>Tingkat Keaslian</Head>
-                <Head>Lokasi Simpan</Head>
-                <Head>File</Head>
-                <th className="px-5 py-3 text-right font-medium">Aksi</th>
+              <tr className="border-b border-border/60 bg-muted/40 text-left text-xs font-medium text-muted-foreground">
+                <th className="w-12 px-4 py-3 text-center">No</th>
+                <th className="whitespace-nowrap px-4 py-3">Nomor Arsip</th>
+                <th className="whitespace-nowrap px-4 py-3">Kode Klasifikasi</th>
+                <th className="px-4 py-3 min-w-[200px]">Nama Arsip</th>
+                <th className="whitespace-nowrap px-4 py-3">Jenis Arsip</th>
+                <th className="whitespace-nowrap px-4 py-3">Divisi</th>
+                <th className="whitespace-nowrap px-4 py-3">Tanggal Arsip</th>
+                <th className="whitespace-nowrap px-4 py-3">Status</th>
+                <th className="w-16 px-4 py-3 text-right">Aksi</th>
               </tr>
             </thead>
-            <tbody>
-              {filteredArchives.length > 0 ? (
-                filteredArchives.map((archive, index) => {
+            <tbody className="divide-y divide-border/60">
+              {paginatedArchives.length > 0 ? (
+                paginatedArchives.map((archive, index) => {
                   const archiveId = archive.id.toString();
-                  const location = archive.lokasi_penyimpanan
-                    ? `${archive.lokasi_penyimpanan.kode} / ${archive.lokasi_penyimpanan.nama}`
-                    : "—";
-                  const year = archive.tanggal_arsip?.getUTCFullYear() ?? archive.kurun_waktu ?? "—";
-
                   const schedule = archive.kode_klasifikasi.jadwal_retensi;
-                  const retentionCalc = schedule && schedule.aktif
-                    ? calculateRetention({
-                        tanggalArsip: archive.tanggal_arsip,
-                        tanggalDasarKhusus: archive.tanggal_dasar_retensi,
-                        jadwalRetensi: schedule,
-                      })
-                    : null;
+                  const retentionCalc =
+                    schedule && schedule.aktif
+                      ? calculateRetention({
+                          tanggalArsip: archive.tanggal_arsip,
+                          tanggalDasarKhusus: archive.tanggal_dasar_retensi,
+                          jadwalRetensi: schedule,
+                          currentDate,
+                        })
+                      : null;
 
-                  const needsReview = needsArchiveRetentionReview(retentionCalc, archive.status_retensi);
-                  const reviewData = needsReview && retentionCalc && schedule ? {
-                    id: archiveId,
-                    nomor_arsip: archive.nomor_arsip,
-                    nama_arsip: archive.nama_arsip,
-                    kode_klasifikasi: archive.kode_klasifikasi.kode,
-                    nama_klasifikasi: archive.kode_klasifikasi.nama,
-                    jadwal_retensi_ringkas: `${schedule.retensi_aktif} ${schedule.satuan_retensi_aktif} Aktif + ${schedule.retensi_inaktif} ${schedule.satuan_retensi_inaktif} Inaktif`,
-                    dasar_perhitungan: schedule.dasar_perhitungan,
-                    tanggal_mulai_aktif: formatArchiveDate(retentionCalc.tanggal_mulai_aktif),
-                    tanggal_selesai_aktif: formatArchiveDate(retentionCalc.tanggal_selesai_aktif),
-                    tanggal_selesai_inaktif: formatArchiveDate(retentionCalc.tanggal_selesai_inaktif),
-                    nasib_akhir: schedule.keterangan_akhir,
-                    status_retensi: retentionCalc.label_status,
-                  } : null;
+                  const needsReview = needsArchiveRetentionReview(
+                    retentionCalc,
+                    archive.keputusan_retensi,
+                    archive.status_retensi
+                  );
+
+                  const reviewData =
+                    needsReview && retentionCalc && schedule
+                      ? {
+                          id: archiveId,
+                          nomor_arsip: archive.nomor_arsip,
+                          nama_arsip: archive.nama_arsip,
+                          kode_klasifikasi: archive.kode_klasifikasi.kode,
+                          nama_klasifikasi: archive.kode_klasifikasi.nama,
+                          jadwal_retensi_ringkas: `${schedule.retensi_aktif} ${schedule.satuan_retensi_aktif} Aktif + ${schedule.retensi_inaktif} ${schedule.satuan_retensi_inaktif} Inaktif`,
+                          dasar_perhitungan: schedule.dasar_perhitungan,
+                          tanggal_mulai_aktif: formatArchiveDate(
+                            retentionCalc.tanggal_mulai_aktif
+                          ),
+                          tanggal_selesai_aktif: formatArchiveDate(
+                            retentionCalc.tanggal_selesai_aktif
+                          ),
+                          tanggal_selesai_inaktif: formatArchiveDate(
+                            retentionCalc.tanggal_selesai_inaktif
+                          ),
+                          nasib_akhir: schedule.keterangan_akhir,
+                          status_retensi: retentionCalc.label_status,
+                        }
+                      : null;
+
+                  const isSelesai =
+                    retentionCalc?.status_retensi === "SELESAI" ||
+                    (retentionCalc?.status_retensi as string) === "SELESAI_RETENSI";
+                  const isPermanen =
+                    tabParam === "permanen" ||
+                    (isSelesai &&
+                      (retentionCalc?.keterangan_akhir === "PERMANEN" ||
+                        archive.keputusan_retensi === "SIMPAN")) ||
+                    schedule?.keterangan_akhir === "PERMANEN" ||
+                    archive.keputusan_retensi === "SIMPAN";
+
+                  const isInaktif =
+                    retentionCalc?.status_retensi === "INAKTIF" ||
+                    (!retentionCalc && archive.status_retensi === "INAKTIF");
+
+                  let displayStatus: "aktif" | "inaktif" | "perlu_tindakan" | "permanen" = "aktif";
+                  if (tabParam === "permanen" || isPermanen) {
+                    displayStatus = "permanen";
+                  } else if (needsReview) {
+                    displayStatus = "perlu_tindakan";
+                  } else if (isInaktif) {
+                    displayStatus = "inaktif";
+                  }
 
                   return (
-                    <tr key={archiveId} className="border-b last:border-0 hover:bg-muted/30">
-                      <Cell muted>{index + 1}</Cell>
-                      <Cell strong>{archive.kode_klasifikasi.kode}</Cell>
-                      <Cell>{archive.divisi ? `${archive.divisi.kode} / ${archive.divisi.nama}` : "—"}</Cell>
-                      <td className="px-5 py-4">
-                        <Link href={`/admin/arsip/${archiveId}`} className="font-medium hover:underline">
+                    <tr
+                      key={archiveId}
+                      className="hover:bg-muted/30 transition-colors"
+                    >
+                      <td className="w-12 px-4 py-3.5 text-center text-xs text-muted-foreground">
+                        {(validPage - 1) * itemsPerPage + index + 1}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3.5 font-mono text-xs font-semibold text-foreground">
+                        {archive.nomor_arsip}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3.5">
+                        <span
+                          className="inline-flex rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-foreground"
+                          title={archive.kode_klasifikasi.nama}
+                        >
+                          {archive.kode_klasifikasi.kode}
+                        </span>
+                      </td>
+                      <td className="max-w-[280px] px-4 py-3.5">
+                        <Link
+                          href={`/admin/arsip/${archiveId}`}
+                          className="block truncate font-medium text-foreground hover:text-primary hover:underline"
+                          title={archive.nama_arsip}
+                        >
                           {archive.nama_arsip}
                         </Link>
                       </td>
-                      <Cell>{archive.satuan ? `${archive.jumlah} ${archive.satuan}` : archive.jumlah}</Cell>
-                      <Cell>{archive.jenis_arsip?.nama ?? "—"}</Cell>
-                      <Cell>{archive.penulis_pengirim ?? "—"}</Cell>
-                      <Cell>{year}</Cell>
-                      <Cell muted>{formatArchiveDate(archive.tanggal_arsip)}</Cell>
-                      <td className="px-5 py-4">
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                            archive.tingkat_keaslian === "Asli"
-                              ? "bg-emerald-100 text-emerald-700"
-                              : "bg-amber-100 text-amber-700"
-                          }`}
-                        >
-                          {archive.tingkat_keaslian ?? "—"}
-                        </span>
+                      <td className="whitespace-nowrap px-4 py-3.5 text-xs text-muted-foreground">
+                        {archive.jenis_arsip?.nama ?? "—"}
                       </td>
-                      <Cell muted>{location}</Cell>
-                      <td className="whitespace-nowrap px-5 py-4">
-                        {archive.file_arsip ? (
-                          <Link
-                            href={`/admin/arsip/${archiveId}/file`}
-                            className="inline-flex items-center gap-1.5 rounded-md border border-primary/20 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
-                            title="Lihat Pratinjau Dokumen"
-                          >
-                            <FileText className="h-3.5 w-3.5" />
-                            <span>Lihat File</span>
-                          </Link>
+                      <td className="whitespace-nowrap px-4 py-3.5 text-xs text-muted-foreground">
+                        {archive.divisi ? (
+                          <span title={archive.divisi.nama}>
+                            {archive.divisi.kode || archive.divisi.nama}
+                          </span>
                         ) : (
-                          <span className="text-xs text-muted-foreground">Tidak ada</span>
+                          "—"
                         )}
                       </td>
-                      <td className="px-5 py-4 text-right">
+                      <td className="whitespace-nowrap px-4 py-3.5 text-xs text-muted-foreground">
+                        {formatArchiveDate(archive.tanggal_arsip)}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3.5">
+                        <ArchiveStatusBadge status={displayStatus} />
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3.5 text-right">
                         <ArsipActions
                           id={archiveId}
                           name={archive.nama_arsip}
@@ -401,33 +621,93 @@ export default async function ArsipPage({
                 })
               ) : (
                 <tr>
-                  <td colSpan={13} className="px-5 py-10 text-center text-muted-foreground">
-                    {query
-                      ? `Tidak ditemukan arsip yang cocok dengan pencarian "${query}".`
-                      : "Belum ada dokumen arsip tersimpan."}
+                  <td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <Archive className="h-8 w-8 text-muted-foreground/40" />
+                      <p className="text-sm font-medium">
+                        {query
+                          ? `Tidak ditemukan arsip yang cocok dengan pencarian "${query}".`
+                          : "Tidak ada data arsip yang sesuai dengan kriteria yang dipilih."}
+                      </p>
+                    </div>
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+
+        {/* 6. Pagination */}
+        <ArsipPagination
+          currentPage={validPage}
+          totalPages={totalPages}
+          totalItems={filteredArchives.length}
+          itemsPerPage={itemsPerPage}
+        />
+      </div>
+
+      {/* 7. Panel "Arsip yang Dimusnahkan" */}
+      <div className="flex flex-col gap-3 rounded-xl border border-rose-200/60 bg-rose-50/30 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-rose-900/30 dark:bg-rose-950/20">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rose-100/80 text-rose-600 dark:bg-rose-900/50 dark:text-rose-400">
+            <Trash2 className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-foreground">
+                Arsip yang Dimusnahkan
+              </h3>
+              <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-medium text-rose-700 dark:bg-rose-900/60 dark:text-rose-300">
+                {(totalAkhirRetensi + countDynamicAkhirRetensi).toLocaleString("id-ID")} arsip
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Daftar arsip yang telah melalui proses pemusnahan atau dalam tahap pemusnahan fisik.
+            </p>
+          </div>
+        </div>
+        <Link
+          href="/admin/arsip/akhir-retensi"
+          className="inline-flex shrink-0 items-center gap-1.5 text-xs font-semibold text-rose-600 hover:text-rose-700 hover:underline dark:text-rose-400 dark:hover:text-rose-300"
+        >
+          Lihat Semua
+          <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
       </div>
     </div>
   );
 }
 
-function Head({ children }: { children: React.ReactNode }) {
-  return <th className="whitespace-nowrap px-5 py-3 font-medium">{children}</th>;
-}
-
-function Cell({ children, muted, strong }: { children: React.ReactNode; muted?: boolean; strong?: boolean }) {
-  return (
-    <td
-      className={`whitespace-nowrap px-5 py-4 ${muted ? "text-muted-foreground" : ""} ${
-        strong ? "font-medium" : ""
-      }`}
-    >
-      {children}
-    </td>
-  );
+function ArchiveStatusBadge({
+  status,
+}: {
+  status: "aktif" | "inaktif" | "perlu_tindakan" | "permanen";
+}) {
+  switch (status) {
+    case "permanen":
+      return (
+        <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700 border border-blue-200/60 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800/40">
+          Permanen
+        </span>
+      );
+    case "perlu_tindakan":
+      return (
+        <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 border border-amber-200/60 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40">
+          Perlu Ditinjau
+        </span>
+      );
+    case "inaktif":
+      return (
+        <span className="inline-flex items-center rounded-full bg-sky-50 px-2.5 py-0.5 text-xs font-medium text-sky-700 border border-sky-200/60 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800/40">
+          Inaktif
+        </span>
+      );
+    case "aktif":
+    default:
+      return (
+        <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 border border-emerald-200/60 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/40">
+          Aktif
+        </span>
+      );
+  }
 }

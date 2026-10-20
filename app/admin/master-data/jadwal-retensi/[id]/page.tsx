@@ -2,7 +2,6 @@ import { ArrowLeft, Clock, FileText, Info, Pencil, ShieldCheck } from "lucide-re
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -66,25 +65,6 @@ export default async function DetailJadwalRetensiPage({ params }: DetailJadwalRe
         return { label: "Perlu Peninjauan / Ada Pengecualian", color: "bg-amber-100 text-amber-800 border-amber-200" };
       default:
         return { label: nasib, color: "bg-slate-100 text-slate-700 border-slate-200" };
-    }
-  };
-
-  const formatDasarPerhitungan = (dasar: string) => {
-    if (!dasar || !dasar.trim()) return "—";
-
-    switch (dasar) {
-      case "LANGSUNG":
-        return "Langsung dihitung dari tanggal arsip";
-      case "SETELAH_TIDAK_BERLAKU":
-        return "Setelah tidak berlaku";
-      case "SETELAH_TAHUN_ANGGARAN_BERAKHIR":
-        return "Setelah tahun anggaran berakhir";
-      case "SETELAH_DIPERBAHARUI":
-        return "Setelah diperbaharui";
-      case "LAINNYA":
-        return "Lainnya";
-      default:
-        return dasar;
     }
   };
 
@@ -203,15 +183,15 @@ export default async function DetailJadwalRetensiPage({ params }: DetailJadwalRe
                 )}
 
                 <div className="flex flex-col gap-1 pt-4 sm:flex-row sm:items-center sm:justify-between">
-                  <span className="text-sm font-medium text-muted-foreground">Dasar Perhitungan</span>
+                  <span className="text-sm font-medium text-muted-foreground">Keterangan Retensi Aktif</span>
                   <span className="text-sm font-semibold text-foreground">
-                    {formatDasarPerhitungan(jadwal.dasar_perhitungan)}
+                    {jadwal.dasar_perhitungan || "—"}
                   </span>
                 </div>
 
                 {jadwal.keterangan_dasar && (
                   <div className="pt-4">
-                    <span className="text-xs font-medium text-muted-foreground">Keterangan Tambahan Dasar Perhitungan</span>
+                    <span className="text-xs font-medium text-muted-foreground">Keterangan Tambahan</span>
                     <p className="mt-1 rounded-md bg-muted/40 p-3 text-sm text-foreground">
                       {jadwal.keterangan_dasar}
                     </p>

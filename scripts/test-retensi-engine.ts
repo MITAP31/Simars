@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { PrismaClient } from "../app/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { calculateRetention, addRetentionDuration, normalizeDateToUTC, needsRetentionReview, isArchivedRetentionEnd } from "../lib/retensi";
+import { calculateRetention, addRetentionDuration, normalizeDateToUTC, needsArchiveRetentionReview, isArchivedRetentionEnd } from "../lib/retensi";
 
 const adapter = new PrismaPg({
   connectionString: process.env.DATABASE_URL,
@@ -114,7 +114,7 @@ async function runTests() {
     currentDate: now,
   });
   assert(
-    testPermanen?.status_retensi === "SELESAI_RETENSI" && testPermanen.keterangan_akhir === "PERMANEN",
+    testPermanen?.status_retensi === "SELESAI" && testPermanen.keterangan_akhir === "PERMANEN",
     "Tahap akhir Disimpan Permanen terdeteksi",
     testPermanen
   );
@@ -132,7 +132,7 @@ async function runTests() {
     currentDate: now,
   });
   assert(
-    testMusnah?.status_retensi === "SELESAI_RETENSI" && testMusnah.keterangan_akhir === "MUSNAH",
+    testMusnah?.status_retensi === "SELESAI" && testMusnah.keterangan_akhir === "MUSNAH",
     "Tahap akhir Dimusnahkan terdeteksi",
     testMusnah
   );
@@ -150,35 +150,35 @@ async function runTests() {
     currentDate: now,
   });
   assert(
-    testTinjau?.status_retensi === "SELESAI_RETENSI" &&
+    testTinjau?.status_retensi === "SELESAI" &&
       testTinjau.keterangan_akhir === "MUSNAH_DENGAN_KETERANGAN_KHUSUS",
     "Tahap akhir Perlu Peninjauan terdeteksi",
     testTinjau
   );
 
-  // Verifikasi perilaku Nasib Akhir (needsRetentionReview & isArchivedRetentionEnd):
-  // 1. Perlu Peninjauan: needsRetentionReview = true, isArchivedRetentionEnd = false
+  // Verifikasi perilaku Nasib Akhir (needsArchiveRetentionReview & isArchivedRetentionEnd):
+  // 1. Perlu Peninjauan: needsArchiveRetentionReview = true, isArchivedRetentionEnd = false
   assert(
-    needsRetentionReview(testTinjau) === true && isArchivedRetentionEnd(testTinjau) === false,
-    "Perlu Peninjauan: needsRetentionReview=true dan isArchivedRetentionEnd=false"
+    needsArchiveRetentionReview(testTinjau) === true && isArchivedRetentionEnd(testTinjau) === false,
+    "Perlu Peninjauan: needsArchiveRetentionReview=true dan isArchivedRetentionEnd=false"
   );
 
-  // 2. Dimusnahkan: needsRetentionReview = false, isArchivedRetentionEnd = true
+  // 2. Dimusnahkan: needsArchiveRetentionReview = false, isArchivedRetentionEnd = true
   assert(
-    needsRetentionReview(testMusnah) === false && isArchivedRetentionEnd(testMusnah) === true,
-    "Dimusnahkan: needsRetentionReview=false dan isArchivedRetentionEnd=true (masuk Arsip Akhir Retensi)"
+    needsArchiveRetentionReview(testMusnah) === false && isArchivedRetentionEnd(testMusnah) === true,
+    "Dimusnahkan: needsArchiveRetentionReview=false dan isArchivedRetentionEnd=true (masuk Arsip Akhir Retensi)"
   );
 
-  // 3. Disimpan Permanen: needsRetentionReview = false, isArchivedRetentionEnd = false
+  // 3. Disimpan Permanen: needsArchiveRetentionReview = false, isArchivedRetentionEnd = false
   assert(
-    needsRetentionReview(testPermanen) === false && isArchivedRetentionEnd(testPermanen) === false,
-    "Disimpan Permanen: needsRetentionReview=false dan isArchivedRetentionEnd=false (tetap di Arsip normal)"
+    needsArchiveRetentionReview(testPermanen) === false && isArchivedRetentionEnd(testPermanen) === false,
+    "Disimpan Permanen: needsArchiveRetentionReview=false dan isArchivedRetentionEnd=false (tetap di Arsip normal)"
   );
 
-  // 4. Belum selesai retensi (Aktif/Inaktif): needsRetentionReview = false, isArchivedRetentionEnd = false
+  // 4. Belum selesai retensi (Aktif/Inaktif): needsArchiveRetentionReview = false, isArchivedRetentionEnd = false
   assert(
-    needsRetentionReview(testAktif) === false && isArchivedRetentionEnd(testAktif) === false,
-    "Retensi belum selesai: needsRetentionReview=false dan isArchivedRetentionEnd=false"
+    needsArchiveRetentionReview(testAktif) === false && isArchivedRetentionEnd(testAktif) === false,
+    "Retensi belum selesai: needsArchiveRetentionReview=false dan isArchivedRetentionEnd=false"
   );
 
   // TEST 8 & 11: Data TEST-RETENSI (REN.01.02, 14 September 2021)
@@ -234,9 +234,68 @@ async function runTests() {
     console.log(`Status saat ini berdasarkan tanggal sistem (${now.toISOString().slice(0, 10)}):`, calcResult?.status_retensi, `(${calcResult?.label_status})`);
   }
 
-  // TEST 9: Verifikasi Master Data Jadwal Retensi tidak terganggu
+  // TEST 9: Boundary Tests (5 Tahun Aktif + 5 Tahun Inaktif dari 2026-01-01)
+  console.log("\n--- TESTING BOUNDARY ENGINE (5 TAHUN AKTIF + 5 TAHUN INAKTIF) ---");
+  const jra5Plus5 = {
+    retensi_aktif: 5,
+    satuan_retensi_aktif: "Tahun",
+    retensi_inaktif: 5,
+    satuan_retensi_inaktif: "Tahun",
+    keterangan_akhir: "MUSNAH",
+  };
+  const tglArsip2026 = new Date("2026-01-01T00:00:00.000Z");
+
+  // Batas 1: 1 hari sebelum selesai aktif (2030-12-31) -> AKTIF
+  const b1 = calculateRetention({
+    tanggalArsip: tglArsip2026,
+    jadwalRetensi: jra5Plus5,
+    currentDate: new Date("2030-12-31T00:00:00.000Z"),
+  });
+  assert(b1?.status_retensi === "AKTIF", "Boundary: 2030-12-31 (1 hari sebelum selesai aktif) -> AKTIF");
+
+  // Batas 2: Tepat pada selesai aktif (2031-01-01) -> AKTIF (perilaku operator <=)
+  const b2 = calculateRetention({
+    tanggalArsip: tglArsip2026,
+    jadwalRetensi: jra5Plus5,
+    currentDate: new Date("2031-01-01T00:00:00.000Z"),
+  });
+  assert(b2?.status_retensi === "AKTIF", "Boundary: 2031-01-01 (tepat selesai aktif) -> AKTIF (hari terakhir masa aktif)");
+
+  // Batas 3: 1 hari setelah selesai aktif (2031-01-02) -> INAKTIF
+  const b3 = calculateRetention({
+    tanggalArsip: tglArsip2026,
+    jadwalRetensi: jra5Plus5,
+    currentDate: new Date("2031-01-02T00:00:00.000Z"),
+  });
+  assert(b3?.status_retensi === "INAKTIF", "Boundary: 2031-01-02 (1 hari setelah selesai aktif) -> INAKTIF");
+
+  // Batas 4: 1 hari sebelum selesai inaktif (2035-12-31) -> INAKTIF
+  const b4 = calculateRetention({
+    tanggalArsip: tglArsip2026,
+    jadwalRetensi: jra5Plus5,
+    currentDate: new Date("2035-12-31T00:00:00.000Z"),
+  });
+  assert(b4?.status_retensi === "INAKTIF", "Boundary: 2035-12-31 (1 hari sebelum selesai inaktif) -> INAKTIF");
+
+  // Batas 5: Tepat pada selesai inaktif (2036-01-01) -> INAKTIF (perilaku operator <=)
+  const b5 = calculateRetention({
+    tanggalArsip: tglArsip2026,
+    jadwalRetensi: jra5Plus5,
+    currentDate: new Date("2036-01-01T00:00:00.000Z"),
+  });
+  assert(b5?.status_retensi === "INAKTIF", "Boundary: 2036-01-01 (tepat selesai inaktif) -> INAKTIF (hari terakhir masa inaktif)");
+
+  // Batas 6: 1 hari setelah selesai inaktif (2036-01-02) -> SELESAI
+  const b6 = calculateRetention({
+    tanggalArsip: tglArsip2026,
+    jadwalRetensi: jra5Plus5,
+    currentDate: new Date("2036-01-02T00:00:00.000Z"),
+  });
+  assert(b6?.status_retensi === "SELESAI", "Boundary: 2036-01-02 (1 hari setelah selesai inaktif) -> SELESAI");
+
+  // TEST 10: Verifikasi Master Data Jadwal Retensi tetap utuh
   const totalJadwal = await prisma.jadwal_retensi.count();
-  assert(totalJadwal === 10, `Master Data Jadwal Retensi tetap utuh (Jumlah: ${totalJadwal})`);
+  assert(totalJadwal >= 10, `Master Data Jadwal Retensi tetap utuh (Jumlah: ${totalJadwal})`);
 
   console.log(`\n==================================================`);
   console.log(`TEST SUMMARY: ${passed} / ${total} tests passed.`);

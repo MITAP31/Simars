@@ -4,11 +4,16 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import {
   SESSION_COOKIE_NAME,
+  SESSION_IDLE_TIMEOUT,
+  SESSION_ABSOLUTE_TIMEOUT,
   SESSION_EXPIRY_DEFAULT,
   SESSION_EXPIRY_REMEMBER,
   getCookieConfig,
   signSession,
+  refreshSessionToken,
   verifySessionToken,
+  revokeSessionToken,
+  revokeSessionId,
   type SessionPayload,
 } from "@/lib/session";
 import {
@@ -23,6 +28,12 @@ export type SafeUser = {
   username: string;
   email: string | null;
   role: string;
+  divisi_id: string | null;
+  divisi: {
+    id: string;
+    kode: string;
+    nama: string;
+  } | null;
   aktif: boolean;
   created_at: Date;
   updated_at: Date;
@@ -30,19 +41,25 @@ export type SafeUser = {
 
 export {
   SESSION_COOKIE_NAME,
+  SESSION_IDLE_TIMEOUT,
+  SESSION_ABSOLUTE_TIMEOUT,
   SESSION_EXPIRY_DEFAULT,
   SESSION_EXPIRY_REMEMBER,
   signSession,
+  refreshSessionToken,
   verifySessionToken,
+  revokeSessionToken,
+  revokeSessionId,
   hashPassword,
   verifyPassword,
   verifyAndUpgradePassword,
 };
 
 /**
- * Menyimpan token sesi ke dalam HttpOnly cookie pada response
+ * Menyimpan token sesi ke dalam HttpOnly cookie pada response.
+ * Jika maxAgeSeconds tidak diberikan, cookie bertindak sebagai Browser Session Cookie (tanpa persistent maxAge).
  */
-export async function setSessionCookie(token: string, maxAgeSeconds: number) {
+export async function setSessionCookie(token: string, maxAgeSeconds?: number) {
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE_NAME, token, getCookieConfig(maxAgeSeconds));
 }
@@ -52,10 +69,7 @@ export async function setSessionCookie(token: string, maxAgeSeconds: number) {
  */
 export async function deleteSessionCookie() {
   const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE_NAME, "", {
-    ...getCookieConfig(0),
-    maxAge: 0,
-  });
+  cookieStore.set(SESSION_COOKIE_NAME, "", getCookieConfig(0));
 }
 
 /**
@@ -69,30 +83,37 @@ export async function getSession(): Promise<SessionPayload | null> {
 }
 
 /**
- * Memvalidasi sesi langsung terhadap database PostgreSQL:
- * 1. Verifikasi tanda tangan dan expiration sesi.
- * 2. Ambil user dari database berdasarkan userId.
- * 3. Pastikan akun user masih ada dan aktif (aktif = true).
- * 4. Jika user tidak ditemukan atau nonaktif, otomatis hapus cookie sesi dan kembalikan null.
+ * Memvalidasi token sesi dan mengambil user dari database PostgreSQL jika valid dan aktif
  */
-export async function getCurrentUser(): Promise<SafeUser | null> {
-  const session = await getSession();
+export async function getUserFromToken(
+  token: string | undefined | null,
+  currentTime?: number
+): Promise<SafeUser | null> {
+  if (!token) return null;
+  const session = await verifySessionToken(token, { currentTime });
   if (!session || !session.userId) {
     return null;
   }
 
   if (!/^\d+$/.test(session.userId)) {
-    await deleteSessionCookie();
     return null;
   }
 
   try {
     const user = await prisma.user.findUnique({
       where: { id: BigInt(session.userId) },
+      include: {
+        divisi: {
+          select: {
+            id: true,
+            kode: true,
+            nama: true,
+          },
+        },
+      },
     });
 
     if (!user || !user.aktif) {
-      await deleteSessionCookie();
       return null;
     }
 
@@ -102,10 +123,39 @@ export async function getCurrentUser(): Promise<SafeUser | null> {
       username: user.username,
       email: user.email,
       role: user.role,
+      divisi_id: user.divisi_id ? user.divisi_id.toString() : null,
+      divisi: user.divisi
+        ? {
+            id: user.divisi.id.toString(),
+            kode: user.divisi.kode,
+            nama: user.divisi.nama,
+          }
+        : null,
       aktif: user.aktif,
       created_at: user.created_at,
       updated_at: user.updated_at,
     };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Memvalidasi sesi langsung terhadap database PostgreSQL:
+ * 1. Verifikasi tanda tangan dan expiration sesi.
+ * 2. Ambil user dari database berdasarkan userId.
+ * 3. Pastikan akun user masih ada dan aktif (aktif = true).
+ * 4. Jika user tidak ditemukan atau nonaktif, otomatis hapus cookie sesi dan kembalikan null.
+ */
+export async function getCurrentUser(): Promise<SafeUser | null> {
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+    const user = await getUserFromToken(token);
+    if (!user && token) {
+      await deleteSessionCookie();
+    }
+    return user;
   } catch {
     return null;
   }

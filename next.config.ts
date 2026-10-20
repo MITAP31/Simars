@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  outputFileTracingExcludes: {
+    "/*": ["./storage/uploads/arsip/**/*", "./public/uploads/arsip/**/*"],
+  },
   experimental: {
     serverActions: {
       // File arsip dibatasi 10 MB pada server action; ruang ekstra untuk multipart.

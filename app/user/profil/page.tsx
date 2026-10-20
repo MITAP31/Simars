@@ -1,12 +1,126 @@
-import { BadgeCheck, Briefcase, Building2, Mail, ShieldCheck, UserCircle } from "lucide-react";
+import { BadgeCheck, Building2, Calendar, Mail, ShieldCheck, User, UserCircle } from "lucide-react";
+import { requireUser } from "@/lib/auth";
 
-const details = [
-  { label: "Nama Lengkap", value: "Budi Santoso", icon: UserCircle, tone: "sky" },
-  { label: "Email", value: "budi@pln.co.id", icon: Mail, tone: "cyan" },
-  { label: "Divisi", value: "Keuangan", icon: Building2, tone: "amber" },
-  { label: "Jabatan", value: "Staff Administrasi", icon: Briefcase, tone: "emerald" },
-];
+export const dynamic = "force-dynamic";
 
-export default function ProfilPage() {
-  return <div className="mx-auto max-w-6xl space-y-6"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">SIMARS / Profil</p><h1 className="mt-1 text-3xl font-bold tracking-tight">Profil Saya</h1><p className="mt-1 text-sm text-muted-foreground">Informasi akun dan peran Anda di SIMARS.</p></div><section className="overflow-hidden rounded-3xl border border-sky-100 bg-card shadow-sm"><div className="h-28 bg-gradient-to-r from-[#075985] via-[#0e7490] to-[#155e75]" /><div className="relative grid gap-6 px-6 pb-6 lg:grid-cols-[260px_1fr]"><div className="-mt-14 text-center lg:text-left"><div className="mx-auto flex h-28 w-28 items-center justify-center rounded-3xl border-4 border-white bg-gradient-to-br from-sky-100 to-cyan-200 text-primary shadow-lg lg:mx-0"><UserCircle className="h-20 w-20" /></div><h2 className="mt-4 text-xl font-bold">Budi Santoso</h2><p className="mt-1 text-sm text-muted-foreground">Pengguna Divisi Keuangan</p><span className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary"><BadgeCheck className="h-3.5 w-3.5" />Akun terverifikasi</span></div><div className="pt-6 lg:pt-8"><div className="flex items-center gap-2 border-b border-sky-100 pb-4"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-100 text-primary"><UserCircle className="h-5 w-5" /></span><div><h3 className="font-semibold">Informasi Akun</h3><p className="text-sm text-muted-foreground">Data pengguna yang tercatat pada sistem.</p></div></div><div className="mt-5 grid gap-4 sm:grid-cols-2">{details.map(({ label, value, icon: Icon, tone }) => <div key={label} className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-slate-50/70 p-4"><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${tone === "amber" ? "bg-amber-100 text-amber-700" : tone === "emerald" ? "bg-emerald-100 text-emerald-700" : "bg-sky-100 text-primary"}`}><Icon className="h-4 w-4" /></span><div><p className="text-xs font-medium text-muted-foreground">{label}</p><p className="mt-1 text-sm font-semibold">{value}</p></div></div>)}</div></div></div></section><section className="flex gap-4 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-5"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700"><ShieldCheck className="h-5 w-5" /></span><div><h2 className="font-semibold text-emerald-950">Data akun terlindungi</h2><p className="mt-1 text-sm leading-6 text-emerald-900/75">Informasi profil dikelola oleh administrator. Hubungi administrator bila terdapat data yang perlu diperbarui.</p></div></section></div>;
+const dateFormatter = new Intl.DateTimeFormat("id-ID", {
+  day: "2-digit",
+  month: "long",
+  year: "numeric",
+});
+
+export default async function ProfilPage() {
+  const user = await requireUser();
+
+  const details = [
+    {
+      label: "Nama Lengkap",
+      value: user.nama,
+      icon: User,
+    },
+    {
+      label: "Username",
+      value: `@${user.username}`,
+      icon: UserCircle,
+    },
+    {
+      label: "Email",
+      value: user.email || "Belum diisi",
+      icon: Mail,
+    },
+    {
+      label: "Divisi Kerja",
+      value: user.divisi ? `${user.divisi.kode} - ${user.divisi.nama}` : "Belum ditentukan",
+      icon: Building2,
+    },
+    {
+      label: "Peran Akses",
+      value: "Pengguna Divisi (Role: user)",
+      icon: ShieldCheck,
+    },
+    {
+      label: "Tanggal Terdaftar",
+      value: dateFormatter.format(user.created_at),
+      icon: Calendar,
+    },
+  ];
+
+  return (
+    <div className="mx-auto max-w-5xl space-y-6">
+      {/* Header */}
+      <div className="space-y-1">
+        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+          <span>SIMARS</span>
+          <span>/</span>
+          <span className="text-foreground">Profil</span>
+        </div>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Profil Saya</h1>
+        <p className="text-sm text-muted-foreground">Informasi akun dan hak akses pengguna di SIMARS.</p>
+      </div>
+
+      {/* Profile Card */}
+      <section className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-xs">
+        <div className="h-24 bg-gradient-to-r from-[#075985] via-[#0e7490] to-[#155e75]" />
+        <div className="relative px-6 pb-6">
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between -mt-12 gap-4 pb-6 border-b border-border/60">
+            <div className="flex items-end gap-4">
+              <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl border-4 border-card bg-primary text-primary-foreground shadow-md text-2xl font-bold">
+                {user.nama
+                  .split(" ")
+                  .map((n) => n[0])
+                  .slice(0, 2)
+                  .join("")
+                  .toUpperCase()}
+              </div>
+              <div className="space-y-0.5">
+                <h2 className="text-xl font-bold text-foreground">{user.nama}</h2>
+                <p className="text-xs text-muted-foreground">
+                  {user.divisi ? `${user.divisi.kode} - ${user.divisi.nama}` : "Divisi belum ditentukan"}
+                </p>
+              </div>
+            </div>
+            <span className="inline-flex items-center gap-1.5 self-start sm:self-end rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">
+              <BadgeCheck className="h-4 w-4" />
+              Akun Aktif
+            </span>
+          </div>
+
+          <div className="pt-6">
+            <h3 className="text-sm font-semibold text-foreground">Detail Informasi Pengguna</h3>
+            <p className="text-xs text-muted-foreground">Data pengguna yang tercatat pada basis data sistem SIMARS.</p>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {details.map(({ label, value, icon: Icon }) => (
+                <div
+                  key={label}
+                  className="flex items-start gap-3 rounded-lg border border-border/60 bg-muted/20 p-3.5"
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
+                    <p className="mt-0.5 truncate text-sm font-semibold text-foreground">{value}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Security Info */}
+      <section className="flex gap-3.5 rounded-xl border border-sky-200/70 bg-sky-50/50 p-4">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-primary">
+          <ShieldCheck className="h-5 w-5" />
+        </span>
+        <div className="space-y-0.5">
+          <h4 className="text-xs font-semibold text-foreground">Data Akun Terkelola</h4>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Informasi akun dan penetapan divisi dikelola secara terpusat oleh Administrator SIMARS. Jika terdapat perubahan divisi atau identitas akun, silakan hubungi administrator.
+          </p>
+        </div>
+      </section>
+    </div>
+  );
 }

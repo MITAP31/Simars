@@ -50,3 +50,10 @@ next-env.d.ts
 skills-lock.json
 # uploaded archive files
 /public/uploads/
+/storage/uploads/
+
+# Local testing output
+/output/
+
+# Local session data
+/storage/sessions/

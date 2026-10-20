@@ -60,7 +60,7 @@ function parseDasarPerhitungan(formData: FormData) {
   }
   const trimmed = value.trim();
   if (trimmed.length > 255) {
-    throw new Error("Dasar perhitungan retensi aktif maksimal 255 karakter.");
+    throw new Error("Keterangan retensi aktif maksimal 255 karakter.");
   }
   return trimmed;
 }

@@ -2,19 +2,42 @@ export type SessionPayload = {
   userId: string;
   username: string;
   role: string;
-  exp: number; // Unix timestamp in seconds
-  iat: number; // Unix timestamp in seconds
+  divisiId?: string | null;
+  iat: number; // Unix timestamp in seconds (waktu login awal)
+  exp: number; // Unix timestamp in seconds (absolute timeout: iat + 8 jam)
+  lastActive: number; // Unix timestamp in seconds (waktu interaksi terakhir)
+  sessionId: string; // ID unik sesi untuk lifecycle tracking & revocation
 };
 
 export const SESSION_COOKIE_NAME = "simars_session";
 
-// Default expiration: 8 hours. Remember Me: 30 days.
-export const SESSION_EXPIRY_DEFAULT = 8 * 60 * 60; // 8 hours in seconds
-export const SESSION_EXPIRY_REMEMBER = 30 * 24 * 60 * 60; // 30 days in seconds
+// Idle Timeout: 30 menit (1.800 detik)
+export const SESSION_IDLE_TIMEOUT = 30 * 60;
+
+// Absolute Session Timeout: Maksimal 8 jam (28.800 detik)
+export const SESSION_ABSOLUTE_TIMEOUT = 8 * 60 * 60;
+
+// Backwards compatibility constants
+export const SESSION_EXPIRY_DEFAULT = SESSION_ABSOLUTE_TIMEOUT;
+export const SESSION_EXPIRY_REMEMBER = SESSION_ABSOLUTE_TIMEOUT;
 
 function getSecretBytes(): Uint8Array {
-  const secret = process.env.AUTH_SECRET || "simars_fallback_secret_for_local_development_only_change_in_prod";
-  return new TextEncoder().encode(secret);
+  const secret = process.env.AUTH_SECRET;
+  const secretBytes = new TextEncoder().encode(secret ?? "");
+
+  if (
+    !secret ||
+    secret.trim() !== secret ||
+    secretBytes.byteLength < 32 ||
+    secret === "simars_fallback_secret_for_local_development_only_change_in_prod" ||
+    secret.startsWith("<")
+  ) {
+    throw new Error(
+      "Konfigurasi autentikasi tidak valid. Atur AUTH_SECRET dengan nilai acak minimal 32 byte sebelum menjalankan aplikasi."
+    );
+  }
+
+  return secretBytes;
 }
 
 function base64UrlEncode(buffer: ArrayBuffer | Uint8Array): string {
@@ -40,20 +63,106 @@ function base64UrlDecode(str: string): Uint8Array {
   return bytes;
 }
 
+// =========================================================================
+// SESSION REVOCATION STORE (In-Memory, Edge & Node.js Compatible)
+// =========================================================================
+
+// Penyimpanan revocation in-memory: key -> exp timestamp
+const revokedStore = new Map<string, number>();
+
+/**
+ * Mencatat pembatalan sesi (revocation) berdasarkan identifier sesi atau signature token
+ */
+export function revokeSessionId(idOrSignature: string, exp: number): void {
+  revokedStore.set(idOrSignature, exp);
+}
+
+/**
+ * Membatalkan sesi dari token yang diberikan (misalnya saat logout)
+ */
+export async function revokeSessionToken(token: string | undefined | null): Promise<boolean> {
+  if (!token || typeof token !== "string") return false;
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return false;
+
+    const [, payloadEnc, sigEnc] = parts;
+    const payloadBytes = base64UrlDecode(payloadEnc);
+    const payload: SessionPayload = JSON.parse(new TextDecoder().decode(payloadBytes));
+
+    const exp = typeof payload.exp === "number"
+      ? payload.exp
+      : Math.floor(Date.now() / 1000) + SESSION_ABSOLUTE_TIMEOUT;
+
+    if (payload.sessionId) {
+      revokeSessionId(payload.sessionId, exp);
+    }
+    revokeSessionId(sigEnc, exp);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Memeriksa apakah sessionId atau signature token telah dibatalkan
+ */
+export function isSessionRevoked(sessionId: string | undefined, sigEnc: string): boolean {
+  const now = Math.floor(Date.now() / 1000);
+
+  if (sessionId && revokedStore.has(sessionId)) {
+    const exp = revokedStore.get(sessionId)!;
+    if (exp > now) return true;
+    revokedStore.delete(sessionId);
+  }
+
+  if (sigEnc && revokedStore.has(sigEnc)) {
+    const exp = revokedStore.get(sigEnc)!;
+    if (exp > now) return true;
+    revokedStore.delete(sigEnc);
+  }
+
+  return false;
+}
+
+// =========================================================================
+// TOKEN GENERATION, REFRESH & VERIFICATION
+// =========================================================================
+
 /**
  * Membuat token sesi bertanda tangan HMAC-SHA256 (Web Crypto API)
  */
 export async function signSession(
-  data: { userId: string; username: string; role: string },
-  maxAgeSeconds: number
+  data: {
+    userId: string;
+    username: string;
+    role: string;
+    divisiId?: string | null;
+    iat?: number;
+    exp?: number;
+    lastActive?: number;
+    sessionId?: string;
+  },
+  maxAgeSeconds?: number
 ): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
+  const iat = data.iat ?? now;
+  const lastActive = data.lastActive ?? now;
+  const effectiveMaxAge = maxAgeSeconds !== undefined
+    ? maxAgeSeconds
+    : SESSION_ABSOLUTE_TIMEOUT;
+  const exp = data.exp ?? (iat + effectiveMaxAge);
+  const sessionId = data.sessionId ?? crypto.randomUUID();
+
   const payload: SessionPayload = {
     userId: data.userId,
     username: data.username,
     role: data.role,
-    iat: now,
-    exp: now + maxAgeSeconds,
+    divisiId: data.divisiId ?? null,
+    iat,
+    exp,
+    lastActive,
+    sessionId,
   };
 
   const header = { alg: "HS256", typ: "JWT" };
@@ -80,10 +189,37 @@ export async function signSession(
 }
 
 /**
- * Memverifikasi integritas, tanda tangan, dan expiration token sesi.
- * Mengembalikan SessionPayload jika valid, atau null jika invalid/expired/manipulasi.
+ * Memperbarui waktu lastActive sesi (sliding window) tanpa memundurkan batas exp absolut awal
  */
-export async function verifySessionToken(token: string | undefined | null): Promise<SessionPayload | null> {
+export async function refreshSessionToken(
+  session: SessionPayload,
+  currentTime?: number
+): Promise<string> {
+  const now = currentTime ?? Math.floor(Date.now() / 1000);
+  return signSession({
+    userId: session.userId,
+    username: session.username,
+    role: session.role,
+    divisiId: session.divisiId ?? null,
+    iat: session.iat,
+    exp: session.exp,
+    lastActive: now,
+    sessionId: session.sessionId,
+  });
+}
+
+/**
+ * Memverifikasi integritas, tanda tangan, status revocation, absolute timeout, dan idle timeout token.
+ * Mengembalikan SessionPayload jika valid, atau null jika invalid/expired/revoked/dimanipulasi.
+ */
+export async function verifySessionToken(
+  token: string | undefined | null,
+  options?: { currentTime?: number }
+): Promise<SessionPayload | null> {
+  // Validate configuration outside the token parsing catch so a missing or weak
+  // secret is reported as a deployment configuration error, not an invalid session.
+  getSecretBytes();
+
   if (!token || typeof token !== "string") {
     return null;
   }
@@ -120,13 +256,31 @@ export async function verifySessionToken(token: string | undefined | null): Prom
     const payloadBytes = base64UrlDecode(payloadEnc);
     const payload: SessionPayload = JSON.parse(new TextDecoder().decode(payloadBytes));
 
-    const now = Math.floor(Date.now() / 1000);
-    if (!payload.exp || payload.exp < now) {
-      return null; // Sesi kadaluarsa
+    if (!payload.userId || !payload.role || !payload.iat || !payload.exp) {
+      return null; // Format data sesi tidak lengkap
     }
 
-    if (!payload.userId || !payload.role) {
-      return null; // Format data sesi tidak lengkap
+    // 1. Cek apakah sesi sudah di-logout / di-revoke
+    if (isSessionRevoked(payload.sessionId, sigEnc)) {
+      return null;
+    }
+
+    const now = options?.currentTime ?? Math.floor(Date.now() / 1000);
+
+    // 2. Validasi Absolute Timeout (maksimal 8 jam dari login awal)
+    if (now >= payload.exp) {
+      return null; // Batas mutlak sesi berakhir
+    }
+
+    // 3. Validasi Idle Timeout (30 menit tanpa aktivitas)
+    const lastActive = typeof payload.lastActive === "number" ? payload.lastActive : payload.iat;
+    if (now - lastActive > SESSION_IDLE_TIMEOUT) {
+      return null; // Sesi idle lebih dari 30 menit
+    }
+
+    // 4. Perlindungan anomali jam masa depan (clock skew > 60 detik)
+    if (payload.iat > now + 60 || lastActive > now + 60) {
+      return null;
     }
 
     return payload;
@@ -136,15 +290,32 @@ export async function verifySessionToken(token: string | undefined | null): Prom
 }
 
 /**
- * Opsi standar Cookie HttpOnly untuk sesi
+ * Opsi standar Cookie HttpOnly untuk sesi SIMARS.
+ * - Tanpa maxAgeSeconds: menghasilkan Browser Session Cookie (berakhir saat browser ditutup).
+ * - maxAgeSeconds = 0: menghapus cookie seketika.
  */
-export function getCookieConfig(maxAgeSeconds: number) {
+export function getCookieConfig(maxAgeSeconds?: number) {
   const isProduction = process.env.NODE_ENV === "production";
-  return {
+  const config: {
+    httpOnly: boolean;
+    secure: boolean;
+    sameSite: "lax";
+    path: string;
+    maxAge?: number;
+    expires?: Date;
+  } = {
     httpOnly: true,
     secure: isProduction,
     sameSite: "lax" as const,
     path: "/",
-    maxAge: maxAgeSeconds,
   };
+
+  if (typeof maxAgeSeconds === "number") {
+    config.maxAge = maxAgeSeconds;
+    if (maxAgeSeconds === 0) {
+      config.expires = new Date(0);
+    }
+  }
+
+  return config;
 }

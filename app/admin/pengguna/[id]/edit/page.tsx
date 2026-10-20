@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { ArrowLeft, UserPen } from "lucide-react";
+import { UserPen } from "lucide-react";
 import { notFound } from "next/navigation";
 
 import { updateUser } from "@/actions/pengguna";
@@ -21,7 +20,7 @@ export default async function EditPenggunaPage({
     notFound();
   }
 
-  const [user, activeAdminCount] = await Promise.all([
+  const [user, activeAdminCount, divisiList] = await Promise.all([
     prisma.user.findUnique({
       where: { id: BigInt(id) },
       select: {
@@ -30,11 +29,16 @@ export default async function EditPenggunaPage({
         username: true,
         email: true,
         role: true,
+        divisi_id: true,
         aktif: true,
       },
     }),
     prisma.user.count({
       where: { role: "admin", aktif: true },
+    }),
+    prisma.divisi.findMany({
+      select: { id: true, kode: true, nama: true },
+      orderBy: { kode: "asc" },
     }),
   ]);
 
@@ -45,39 +49,31 @@ export default async function EditPenggunaPage({
   const isLastActiveAdmin = user.role === "admin" && user.aktif && activeAdminCount <= 1;
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-6 p-6">
-      <div className="flex items-start gap-4">
-        <Link
-          href="/admin/pengguna"
-          className="flex h-10 w-10 items-center justify-center rounded-md border bg-card shadow-sm hover:bg-muted transition-colors"
-          aria-label="Kembali ke daftar pengguna"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <div className="flex items-center gap-3">
-          <div className="rounded-lg bg-primary/10 p-2 text-primary">
-            <UserPen className="h-5 w-5" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Edit Pengguna</h1>
-            <p className="text-sm text-muted-foreground">
-              Perbarui profil dan hak akses pengguna <span className="font-semibold text-foreground">{user.nama}</span>.
-            </p>
-          </div>
-        </div>
-      </div>
-
+    <div className="mx-auto w-full max-w-4xl p-4 sm:p-6 md:p-8">
       <PenggunaForm
         action={updateUser}
         isEdit={true}
         isLastActiveAdmin={isLastActiveAdmin}
         submitLabel="Simpan Perubahan"
+        title="Edit Pengguna"
+        subtitle={
+          <>
+            Perbarui profil dan hak akses pengguna <strong className="font-semibold text-slate-800 dark:text-slate-200">{user.nama}</strong>.
+          </>
+        }
+        headerIcon={<UserPen className="h-5 w-5" />}
+        divisiList={divisiList.map((d) => ({
+          id: d.id.toString(),
+          kode: d.kode,
+          nama: d.nama,
+        }))}
         values={{
           id: user.id.toString(),
           nama: user.nama,
           username: user.username,
           email: user.email,
           role: user.role,
+          divisi_id: user.divisi_id ? user.divisi_id.toString() : null,
           aktif: user.aktif,
         }}
       />

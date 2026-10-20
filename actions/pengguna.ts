@@ -12,15 +12,18 @@ const listPath = "/admin/pengguna";
 type UserToast =
   | "user-created"
   | "user-updated"
+  | "user-deleted"
   | "user-activated"
   | "user-deactivated"
   | "user-password-reset"
   | "user-self-deactivate-forbidden"
+  | "user-self-delete-forbidden"
   | "user-last-admin-forbidden"
   | "user-duplicate-username"
   | "user-duplicate-email"
   | "user-password-mismatch"
   | "user-password-short"
+  | "user-divisi-invalid"
   | "user-invalid"
   | "user-error";
 
@@ -90,12 +93,38 @@ function parsePasswordAndConfirm(formData: FormData) {
   return password;
 }
 
+async function parseDivisiId(formData: FormData): Promise<bigint | null> {
+  const value = formData.get("divisi_id");
+  if (value === null || value === undefined) return null;
+  const str = typeof value === "string" ? value.trim() : "";
+  if (!str || str === "" || str === "null" || str === "none") return null;
+
+  if (!/^\d+$/.test(str)) {
+    throw new Error("ID divisi tidak valid.");
+  }
+
+  const divisiId = BigInt(str);
+  const existingDivisi = await prisma.divisi.findUnique({
+    where: { id: divisiId },
+    select: { id: true },
+  });
+
+  if (!existingDivisi) {
+    throw new Error("Divisi tidak ditemukan.");
+  }
+
+  return divisiId;
+}
+
 function userError(error: unknown): UserToast {
   if (error instanceof Error) {
     if (error.message.includes("Username sudah digunakan")) return "user-duplicate-username";
     if (error.message.includes("Email sudah digunakan")) return "user-duplicate-email";
     if (error.message.includes("minimal 8 karakter")) return "user-password-short";
     if (error.message.includes("Konfirmasi password tidak sama")) return "user-password-mismatch";
+    if (error.message.includes("Divisi tidak ditemukan") || error.message.includes("ID divisi tidak valid")) {
+      return "user-divisi-invalid";
+    }
     if (
       error.message.includes("wajib diisi") ||
       error.message.includes("tidak valid") ||
@@ -119,6 +148,7 @@ export async function createUser(formData: FormData) {
     const username = parseUsername(formData);
     const email = parseEmail(formData);
     const role = parseRole(formData);
+    const divisi_id = await parseDivisiId(formData);
     const password = parsePasswordAndConfirm(formData);
     const aktif = parseAktif(formData);
 
@@ -146,6 +176,7 @@ export async function createUser(formData: FormData) {
         username,
         email,
         role,
+        divisi_id,
         password: hashedPassword,
         aktif,
       },
@@ -174,6 +205,7 @@ export async function updateUser(formData: FormData) {
     const username = parseUsername(formData);
     const email = parseEmail(formData);
     const role = parseRole(formData);
+    const divisi_id = await parseDivisiId(formData);
     const aktif = parseAktif(formData);
 
     // Proteksi: Tidak boleh mendegradasi role admin terakhir atau menonaktifkannya
@@ -224,6 +256,7 @@ export async function updateUser(formData: FormData) {
         username,
         email,
         role,
+        divisi_id,
         aktif,
       },
     });
@@ -302,6 +335,54 @@ export async function resetUserPassword(formData: FormData) {
 
     revalidateUserPages();
     redirect(pathWithToast("user-password-reset"));
+  } catch (error) {
+    unstable_rethrow(error);
+    redirect(pathWithToast(userError(error)));
+  }
+}
+
+export async function deleteUser(input: FormData | string | bigint) {
+  try {
+    const currentAdmin = await requireAdmin();
+    let id: bigint;
+    if (typeof input === "bigint") {
+      id = input;
+    } else if (typeof input === "string") {
+      id = parseId(input);
+    } else if (input instanceof FormData) {
+      id = parseId(input.get("id"));
+    } else {
+      throw new Error("ID pengguna tidak valid.");
+    }
+
+    const targetUser = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, role: true, aktif: true, username: true, nama: true },
+    });
+    if (!targetUser) throw new Error("Pengguna tidak ditemukan.");
+
+    // 1. Proteksi: Tidak boleh menghapus akun sendiri
+    if (currentAdmin.id === id.toString()) {
+      redirect(pathWithToast("user-self-delete-forbidden"));
+    }
+
+    // 2. Proteksi: Tidak boleh menghapus admin aktif terakhir
+    if (targetUser.role === "admin" && targetUser.aktif) {
+      const totalActiveAdmins = await prisma.user.count({
+        where: { role: "admin", aktif: true },
+      });
+      if (totalActiveAdmins <= 1) {
+        redirect(pathWithToast("user-last-admin-forbidden"));
+      }
+    }
+
+    // Eksekusi hard delete (relasi divisi menggunakan onDelete: SetNull, arsip tidak memiliki FK user)
+    await prisma.user.delete({
+      where: { id },
+    });
+
+    revalidateUserPages();
+    redirect(pathWithToast("user-deleted"));
   } catch (error) {
     unstable_rethrow(error);
     redirect(pathWithToast(userError(error)));

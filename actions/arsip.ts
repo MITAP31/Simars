@@ -1,19 +1,19 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { redirect, unstable_rethrow } from "next/navigation";
 
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
-import { calculateRetention, needsArchiveRetentionReview, RETENTION_DECISION_PERMANEN } from "@/lib/retensi";
+import { calculateRetention, isArchivedRetentionEnd, needsArchiveRetentionReview } from "@/lib/retensi";
 
-type ToastCode = "created" | "updated" | "deleted" | "restored" | "retention-permanent" | "retention-destroyed" | "retention-review-error" | "error";
+type ToastCode = "created" | "updated" | "deleted" | "restored" | "retention-permanent" | "retention-destroyed" | "retention-review-error" | "permanently-deleted" | "error";
 
 const MAX_ARCHIVE_FILE_SIZE = 10 * 1024 * 1024;
-const uploadDirectory = path.join(process.cwd(), "public", "uploads", "arsip");
+const uploadDirectory = path.join(process.cwd(), "storage", "uploads", "arsip");
 const allowedArchiveFiles = new Map([
   [".pdf", ["application/pdf"]],
   [".doc", ["application/msword"]],
@@ -23,11 +23,11 @@ const allowedArchiveFiles = new Map([
   [".png", ["image/png"]],
 ]);
 
-function requiredString(formData: FormData, field: string) {
+function requiredString(formData: FormData, field: string, label?: string) {
   const value = formData.get(field);
 
   if (typeof value !== "string" || !value.trim()) {
-    throw new Error(`${field} wajib diisi.`);
+    throw new Error(`${label ?? field} wajib diisi.`);
   }
 
   return value.trim();
@@ -139,6 +139,12 @@ function parseArchiveForm(formData: FormData) {
   const jenisArsipIdValue = optionalString(formData, "jenis_arsip_id");
   const jenisArsipId = jenisArsipIdValue ? parseId(jenisArsipIdValue, "Jenis arsip") : null;
 
+  const tanggalArsipRaw = requiredString(formData, "tanggal_arsip", "Tanggal dokumen");
+  const tanggalArsip = parseDate(tanggalArsipRaw);
+  if (!tanggalArsip) {
+    throw new Error("Tanggal dokumen wajib diisi.");
+  }
+
   return {
     nomorArsip,
     namaArsip,
@@ -148,7 +154,7 @@ function parseArchiveForm(formData: FormData) {
     divisiId,
     jenisArsipId,
     kurunWaktu: optionalString(formData, "kurun_waktu"),
-    tanggalArsip: parseDate(optionalString(formData, "tanggal_arsip")),
+    tanggalArsip,
     tingkatKeaslian: optionalString(formData, "tingkat_keaslian"),
     penulisPengirim: optionalString(formData, "penulis_pengirim"),
     keterangan: optionalString(formData, "keterangan"),
@@ -224,7 +230,7 @@ export async function createArsip(formData: FormData) {
     redirect(pathWithToast("/admin/arsip", "created"));
   } catch (error) {
     unstable_rethrow(error);
-    redirect(pathWithToast(returnPath(formData, fallbackPath), "retention-review-error"));
+    redirect(pathWithToast(returnPath(formData, fallbackPath), "error"));
   }
 }
 
@@ -328,7 +334,8 @@ export async function deleteArsip(formData: FormData) {
     });
 
     revalidatePath(listPath);
-    revalidatePath("/admin/arsip/tempat-sampah");
+    revalidatePath("/admin/arsip/akhir-retensi");
+    revalidatePath("/admin/dashboard");
     redirect(pathWithToast(listPath, "deleted"));
   } catch (error) {
     redirectWithError(error, listPath);
@@ -336,7 +343,7 @@ export async function deleteArsip(formData: FormData) {
 }
 
 export async function restoreArsip(formData: FormData) {
-  const trashPath = "/admin/arsip/tempat-sampah";
+  const akhirRetensiPath = "/admin/arsip/akhir-retensi";
 
   try {
     await requireAdmin();
@@ -346,7 +353,7 @@ export async function restoreArsip(formData: FormData) {
       select: { id: true, status_arsip: true },
     });
 
-    if (!arsip || arsip.status_arsip !== "dihapus") {
+    if (!arsip || (arsip.status_arsip !== "dihapus" && arsip.status_arsip !== "akhir_retensi")) {
       throw new Error("Arsip tidak dapat dipulihkan.");
     }
 
@@ -356,22 +363,87 @@ export async function restoreArsip(formData: FormData) {
     });
 
     revalidatePath("/admin/arsip");
-    revalidatePath(trashPath);
-    redirect(pathWithToast(trashPath, "restored"));
+    revalidatePath(akhirRetensiPath);
+    revalidatePath("/admin/dashboard");
+    redirect(pathWithToast(akhirRetensiPath, "restored"));
   } catch (error) {
-    redirectWithError(error, trashPath);
+    redirectWithError(error, akhirRetensiPath);
   }
 }
 
-/** Menyimpan keputusan untuk arsip yang telah selesai retensi dan perlu ditinjau. */
+export async function deleteArsipPermanently(formData: FormData) {
+  const akhirRetensiPath = "/admin/arsip/akhir-retensi";
+
+  try {
+    await requireAdmin();
+    const arsipId = parseId(requiredString(formData, "id"), "ID arsip");
+    const arsip = await prisma.arsip.findUnique({
+      where: { id: arsipId },
+      include: {
+        kode_klasifikasi: {
+          include: {
+            jadwal_retensi: true,
+          },
+        },
+      },
+    });
+
+    if (!arsip) {
+      throw new Error("Arsip tidak ditemukan.");
+    }
+
+    const schedule = arsip.kode_klasifikasi?.jadwal_retensi;
+    const calc =
+      schedule && schedule.aktif
+        ? calculateRetention({
+            tanggalArsip: arsip.tanggal_arsip,
+            tanggalDasarKhusus: arsip.tanggal_dasar_retensi,
+            jadwalRetensi: schedule,
+          })
+        : null;
+
+    const isEnd = isArchivedRetentionEnd(calc, arsip.keputusan_retensi, arsip.status_arsip);
+
+    if (!isEnd && arsip.status_arsip !== "akhir_retensi" && arsip.status_arsip !== "dihapus") {
+      throw new Error("Hanya arsip akhir retensi yang dapat dihapus permanen.");
+    }
+
+    if (arsip.file_arsip) {
+      try {
+        const filePath = path.join(process.cwd(), "storage", arsip.file_arsip.replace(/^\/?/, ""));
+        await unlink(filePath);
+      } catch {
+        // Abaikan jika file fisik tidak ada di disk
+      }
+    }
+
+    await prisma.arsip.delete({
+      where: { id: arsipId },
+    });
+
+    revalidatePath("/admin/arsip");
+    revalidatePath(akhirRetensiPath);
+    revalidatePath("/admin/dashboard");
+    redirect(pathWithToast(akhirRetensiPath, "permanently-deleted"));
+  } catch (error) {
+    redirectWithError(error, akhirRetensiPath);
+  }
+}
+
+/** Menyimpan keputusan untuk arsip yang telah selesai retensi dan perlu ditinjau (MUSNAH_DENGAN_KETERANGAN_KHUSUS). */
 export async function reviewRetentionArsip(formData: FormData) {
   const fallbackPath = "/admin/arsip";
 
   try {
     await requireAdmin();
     const arsipId = parseId(requiredString(formData, "id"), "ID arsip");
-    const keputusan = requiredString(formData, "keputusan");
-    if (keputusan !== "permanen" && keputusan !== "pemusnahan") throw new Error("Keputusan retensi tidak valid.");
+    const rawKeputusan = requiredString(formData, "keputusan").toLowerCase();
+    const isSimpan = rawKeputusan === "simpan" || rawKeputusan === "permanen";
+    const isMusnah = rawKeputusan === "musnah" || rawKeputusan === "pemusnahan";
+
+    if (!isSimpan && !isMusnah) {
+      throw new Error("Keputusan retensi tidak valid.");
+    }
 
     const arsip = await prisma.arsip.findUnique({
       where: { id: arsipId },
@@ -382,24 +454,32 @@ export async function reviewRetentionArsip(formData: FormData) {
       ? calculateRetention({ tanggalArsip: arsip.tanggal_arsip, tanggalDasarKhusus: arsip.tanggal_dasar_retensi, jadwalRetensi: schedule })
       : null;
 
-    if (!arsip || arsip.status_arsip !== "tersimpan" || !needsArchiveRetentionReview(retention, arsip.status_retensi)) {
+    if (!arsip || arsip.status_arsip === "dihapus" || !needsArchiveRetentionReview(retention, arsip.keputusan_retensi, arsip.status_retensi)) {
       throw new Error("Arsip tidak memenuhi syarat peninjauan retensi.");
     }
 
     await prisma.arsip.update({
       where: { id: arsipId },
-      data: keputusan === "permanen"
-        ? { status_retensi: RETENTION_DECISION_PERMANEN }
-        : { status_arsip: "dihapus", status_retensi: "SELESAI_RETENSI_DIMUSNAHKAN" },
+      data: isSimpan
+        ? {
+            status_retensi: "SELESAI",
+            keputusan_retensi: "SIMPAN",
+            status_arsip: "tersimpan",
+          }
+        : {
+            status_retensi: "SELESAI",
+            keputusan_retensi: "MUSNAH",
+            status_arsip: "akhir_retensi",
+          },
     });
 
     const returnTo = returnPath(formData, fallbackPath);
     revalidatePath("/admin", "layout");
     revalidatePath("/admin/arsip");
-    revalidatePath("/admin/arsip/tempat-sampah");
+    revalidatePath("/admin/arsip/akhir-retensi");
     revalidatePath("/admin/dashboard");
     revalidatePath(`/admin/arsip/${arsipId.toString()}`);
-    redirect(pathWithToast(returnTo, keputusan === "permanen" ? "retention-permanent" : "retention-destroyed"));
+    redirect(pathWithToast(returnTo, isSimpan ? "retention-permanent" : "retention-destroyed"));
   } catch (error) {
     unstable_rethrow(error);
     redirect(pathWithToast(returnPath(formData, fallbackPath), "retention-review-error"));
